@@ -14,6 +14,9 @@ de entrenos cada semana según tus objetivos y los días que tengas.
 2. **Perfil → Objetivos.** Añade tus carreras (a pie, HYROX o triatlón) con fecha y tiempo meta.
 3. **Botón +** cada vez que entrenes: a mano (duración, distancia, pulso, esfuerzo) o desde un archivo
    GPX/TCX. Para la fuerza puedes pegar el texto que comparte Hevy y se leen las series.
+   - **Android:** con la app instalada, desde la app del reloj (Suunto, Mi Fitness…) usa
+     *Compartir → Entreno* y la actividad se guarda sola.
+   - **iPhone:** *Compartir → Guardar en Archivos* y súbela con el botón +.
 4. **Una vez a la semana** vuelve a subir el export de Strava: sustituye tus entrenos manuales por la
    versión de Strava cuando coinciden, así todo queda exacto.
 5. **Cada domingo** di cuántos días vas a entrenar (pestaña Semana) y la app te propone los entrenos.

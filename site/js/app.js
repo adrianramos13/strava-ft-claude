@@ -72,7 +72,9 @@
   }
   $$('.tabs button').forEach((b) => b.addEventListener('click', () => ir(b.dataset.tab)));
   document.addEventListener('click', (e) => { const g = e.target.closest('[data-goto]'); if (g) ir(g.dataset.goto, g.dataset.anchor); });
-  window.addEventListener('hashchange', () => ir(location.hash.slice(1)));
+  window.addEventListener('hashchange', () => {
+    if (location.hash === '#compartido') { ir('inicio'); recogerCompartidos(); } else ir(location.hash.slice(1));
+  });
   $$('.seg button').forEach((b) => b.addEventListener('click', () => { seg = b.dataset.seg; pintarProgreso(); }));
 
   function pintar() {
@@ -297,26 +299,27 @@
   let archivoExtra = null;  // datos del archivo que el formulario no muestra (FC máx., desnivel)
   // repetida si empieza a la misma hora (±10 min) o si es el mismo día, deporte y duración parecida
   const mismoArchivo = (a, b) => Math.abs(new Date(a.fecha) - new Date(b.fecha)) < 10 * 60000 || mismoEntreno(a, b);
+  // guarda directamente una lista de archivos de actividad (varios desde el selector o compartidos desde otra app)
+  async function guardarArchivos(files) {
+    let ok = 0, rep = 0; const fallos = [];
+    for (const f of files) {
+      try {
+        const t = await window.IMP.leerActividad(f);
+        const a = {id: 'f' + Date.now() + '-' + ok, origen: 'archivo', tipo: '', esfuerzo: null, rpe: null, descripcion: null, ...t,
+          sport: t.sport || 'other', nombre: t.nombre || NOMBRE_DEF[t.sport || 'other']};
+        if (ST.acts.some((b) => mismoArchivo(a, b))) { rep++; continue; }
+        ST.acts.push(a); ok++;
+      } catch (err) { fallos.push(f.name); }
+    }
+    await guardar('acts'); recalcular();
+    const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+    toast(`${ok ? `Guardada${ok === 1 ? '' : 's'} ${pl(ok, 'actividad', 'actividades')}. Métricas actualizadas` : 'Ninguna actividad nueva'}${rep ? `; ${pl(rep, 'ya estaba', 'ya estaban')}` : ''}${fallos.length ? `; no he podido leer: ${fallos.join(', ')}` : ''}.`);
+    return ok;
+  }
   $('#f-archivo').addEventListener('change', async (e) => {
     const files = [...e.target.files]; e.target.value = '';
     if (!files.length) return;
-    if (files.length > 1) {  // varios: se guardan directamente
-      let ok = 0, rep = 0; const fallos = [];
-      for (const f of files) {
-        try {
-          const t = await window.IMP.leerActividad(f);
-          const a = {id: 'f' + Date.now() + '-' + ok, origen: 'archivo', tipo: '', esfuerzo: null, rpe: null, descripcion: null, ...t,
-            sport: t.sport || 'other', nombre: t.nombre || NOMBRE_DEF[t.sport || 'other']};
-          if (ST.acts.some((b) => mismoArchivo(a, b))) { rep++; continue; }
-          ST.acts.push(a); ok++;
-        } catch (err) { fallos.push(f.name); }
-      }
-      await guardar('acts'); recalcular();
-      const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
-      toast(`${ok ? `Guardada${ok === 1 ? '' : 's'} ${pl(ok, 'actividad', 'actividades')}` : 'Ninguna actividad nueva'}${rep ? `; ${pl(rep, 'ya estaba', 'ya estaban')}` : ''}${fallos.length ? `; no he podido leer: ${fallos.join(', ')}` : ''}.`);
-      if (ok) ir('inicio');
-      return;
-    }
+    if (files.length > 1) { if (await guardarArchivos(files)) ir('inicio'); return; }
     const f = files[0];
     try {
       const t = await window.IMP.leerActividad(f);
@@ -546,6 +549,28 @@
     recalcular(); toast('Datos borrados');
   });
 
+  // ------------------------------------------------------------ compartido desde otra app (Android)
+  // El service worker deja los archivos en la caché "compartidos"; aquí se leen, se guardan y se borran.
+  async function recogerCompartidos() {
+    history.replaceState(null, '', '#inicio');
+    if (!('caches' in window)) return;
+    const c = await caches.open('compartidos');
+    const reqs = await c.keys();
+    const files = [];
+    let texto = '';
+    for (const r of reqs) {
+      const res = await c.match(r);
+      if (r.url.endsWith('/__texto')) texto = await res.text();
+      else files.push(new File([await res.blob()], decodeURIComponent(r.url.split('/').pop()).replace(/^\d+-/, '') || 'actividad'));
+      await c.delete(r);
+    }
+    if (files.length) await guardarArchivos(files);
+    else if (texto) toast(/strava/i.test(texto)
+      ? 'Strava solo comparte un enlace, no los datos. Comparte el archivo desde la app de tu reloj o expórtalo en strava.com.'
+      : 'Lo compartido no contiene ningún archivo de actividad (FIT, GPX o TCX).');
+    else toast('No ha llegado ningún archivo. Prueba a compartir de nuevo.');
+  }
+
   // ------------------------------------------------------------ arranque
   (async () => {
     const ok = await DB.open();
@@ -553,7 +578,9 @@
     for (const k of ['perfil', 'acts', 'planes', 'ajustes']) { const v = await DB.get(k); if (v) ST[k] = v; }
     ST.perfil.objetivos = ST.perfil.objetivos || [];
     recalcular();
-    ir(location.hash.slice(1) || 'inicio');
+    const compartido = location.hash === '#compartido';
+    ir(compartido ? 'inicio' : (location.hash.slice(1) || 'inicio'));
+    if (compartido) await recogerCompartidos();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   })();
