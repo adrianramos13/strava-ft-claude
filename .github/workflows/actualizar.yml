@@ -1,0 +1,69 @@
+name: Actualizar paneles
+
+on:
+  schedule:
+    - cron: '17 5-22/2 * * *'   # cada 2 horas de 7:17 a 23:17 (hora de Madrid en invierno)
+  workflow_dispatch:            # botón "Run workflow" (también desde la app de GitHub)
+  repository_dispatch:
+    types: [strava]             # aviso instantáneo de Strava (opción C)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write   # para que GitHub no desactive la tarea programada tras 60 días sin commits
+
+concurrency:
+  group: paneles
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install requests==2.32.3 cryptography==43.0.3
+
+      # caché cifrada: refresh token vigente y detalles ya descargados de Strava
+      - uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: strava-${{ github.run_id }}
+          restore-keys: strava-
+
+      - name: Descargar de Strava y generar paneles
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+        run: python panel/sync.py --out _site --cache cache
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: cache
+          key: strava-${{ github.run_id }}
+
+      - name: Mantener activa la tarea programada
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/actualizar.yml/enable" || true
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

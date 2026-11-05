@@ -1,0 +1,9 @@
+_site/
+cache/
+__pycache__/
+*.pyc
+# nunca subir datos sin cifrar
+export*/
+*.zip
+*.csv
+.env

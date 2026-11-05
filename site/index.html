@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f6f7f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121512" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Entreno">
+<title>Panel de entreno</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<form id="login" class="login" autocomplete="on">
+  <div class="login-card">
+    <svg class="login-mark" viewBox="0 0 48 48" aria-hidden="true"><path d="M4 34 L14 22 L22 28 L32 12 L44 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1>Panel de entreno</h1>
+    <p>Tus datos están cifrados. Escribe tu contraseña para verlos.</p>
+    <input type="text" name="username" autocomplete="username" value="panel" hidden>
+    <label for="pw">Contraseña</label>
+    <input id="pw" name="password" type="password" autocomplete="current-password" required>
+    <label class="check"><input id="recordar" type="checkbox" checked> Recordar en este dispositivo</label>
+    <button type="submit" id="entrar">Entrar</button>
+    <p class="login-err" id="login-err" hidden>Contraseña incorrecta. Prueba otra vez.</p>
+  </div>
+</form>
+
+<main id="app" class="tp" hidden>
+  <header class="tp-head" id="resumen">
+    <div class="tp-top">
+      <h1>Panel de entreno de <span data-v="meta.nombre">—</span></h1>
+      <button type="button" class="tp-out" id="salir">Salir</button>
+    </div>
+    <p class="tp-lead">Ahora mismo estás <b data-v="estado.estado">—</b>: tu frescura es <b data-v="estado.frescura" data-f="signo">—</b> y tu carga de los últimos 28 días cambió <b data-v="estado.cambio_pct" data-f="pct">—</b> frente a los 28 anteriores.</p>
+    <p class="tp-meta"><span data-v="meta.total" data-f="n">—</span> actividades desde el <span data-v="meta.desde">—</span> · actualizado <span data-v="meta.generado" data-f="hace">—</span></p>
+  </header>
+
+  <div class="tp-tiles">
+    <div class="tp-tile">
+      <div class="tp-help"><button type="button" aria-describedby="pop-forma" aria-label="Qué es la forma">?</button><div class="tp-pop" id="pop-forma" role="tooltip"><p><strong>Forma</strong> es tu nivel de entrenamiento acumulado: la media de tu carga diaria de las últimas 6 semanas, pesando más los días recientes.</p><p>Sube poco a poco si entrenas con constancia y baja si paras. Cuanto más alta, más carga aguantas.</p><p>Escala orientativa: menos de 20 es poca base; de 20 a 40, deportista recreativo regular; de 40 a 60, amateur bien entrenado; de 60 a 80, avanzado; más de 80, nivel élite o de mucho volumen.</p></div></div>
+      <span class="tp-tlabel">Forma (42 días)</span>
+      <span class="tp-big" data-v="estado.forma" data-f="n">—</span>
+      <div class="tp-scale" data-escala="forma" aria-hidden="true"></div>
+    </div>
+    <div class="tp-tile">
+      <div class="tp-help"><button type="button" aria-describedby="pop-fatiga" aria-label="Qué es la fatiga">?</button><div class="tp-pop" id="pop-fatiga" role="tooltip"><p><strong>Fatiga</strong> es el cansancio de la última semana: la misma media que la forma, pero solo de los últimos 7 días.</p><p>Usa la misma escala que la forma, pero lo que importa es compararlas. Unos 10–25 puntos por encima de la forma es una semana dura y productiva; más de 30 por encima, o varias semanas así, es demasiado; por debajo de la forma significa que estás recuperando.</p></div></div>
+      <span class="tp-tlabel">Fatiga (7 días)</span>
+      <span class="tp-big" data-v="estado.fatiga" data-f="n">—</span>
+      <div class="tp-scale" data-escala="fatiga" aria-hidden="true"></div>
+    </div>
+    <div class="tp-tile">
+      <div class="tp-help"><button type="button" aria-describedby="pop-frescura" aria-label="Qué es la frescura">?</button><div class="tp-pop" id="pop-frescura" role="tooltip"><p><strong>Frescura</strong> es la forma menos la fatiga: si estás descansado o cargado.</p><p>Por encima de +5: fresco, ideal para competir. Entre −10 y +5: equilibrado. Entre −30 y −10: cargando, que es normal en semanas de entreno fuerte. Por debajo de −30 durante días: riesgo de sobrecarga.</p></div></div>
+      <span class="tp-tlabel">Frescura (forma − fatiga)</span>
+      <span class="tp-big" data-v="estado.frescura" data-f="signo">—</span>
+      <span class="tp-chip" id="chip-estado">—</span>
+    </div>
+    <div class="tp-tile">
+      <div class="tp-help"><button type="button" aria-describedby="pop-carga" aria-label="Qué es la carga">?</button><div class="tp-pop" id="pop-carga" role="tooltip"><p><strong>Carga</strong> es la suma de puntos de esfuerzo de tus sesiones. Cada sesión puntúa según su duración y su intensidad: el Esfuerzo Relativo de Strava si lo hay; si no, un cálculo con tu pulso medio (TRIMP) o, sin pulso, una estimación por duración y deporte.</p><p>Compara los últimos 28 días con los 28 anteriores. Subir más de un 10–15 % de golpe aumenta el riesgo de lesión.</p></div></div>
+      <span class="tp-tlabel">Carga, últimos 28 días</span>
+      <span class="tp-big" data-v="estado.carga4" data-f="n">—</span>
+      <span class="tp-tnote">Los 28 anteriores: <span data-v="estado.carga4_prev" data-f="n">—</span></span>
+    </div>
+  </div>
+
+  <section class="tp-section" id="objetivos">
+    <h2>Objetivos</h2>
+    <div class="tp-goals" id="goals"></div>
+    <div class="tp-card">
+      <h3>Kilómetros de carrera por semana: real y plan</h3>
+      <p class="tp-note">Barras llenas: lo que has corrido. Barras huecas: el volumen propuesto, que sube poco a poco con una semana de descarga cada cuatro. Las líneas marcan tus objetivos.</p>
+      <ul class="tp-legend"><li><i class="sw0"></i>Km reales</li><li><i class="sw1 hollow"></i>Km del plan</li></ul>
+      <div class="tp-chart h-wk" id="g-plan"></div>
+    </div>
+    <div class="tp-card">
+      <h3>Plan por fases</h3>
+      <p class="tp-note">Una propuesta para encajar tus objetivos. Es orientativa y no sustituye a un entrenador.</p>
+      <ol class="tp-phases" id="fases"></ol>
+    </div>
+  </section>
+
+  <section class="tp-section" id="carga">
+    <h2>Carga y forma</h2>
+    <div class="tp-card">
+      <h3>Forma, fatiga y frescura, últimos 12 meses</h3>
+      <p class="tp-note">La forma sube cuando entrenas de forma constante. Una frescura muy negativa durante semanas es señal de sobrecarga; positiva antes de una carrera es lo ideal.</p>
+      <div class="tp-chart h-pmc" id="g-pmc"></div>
+    </div>
+    <div class="tp-card">
+      <h3>Horas por semana y deporte, últimas 26 semanas</h3>
+      <ul class="tp-legend" id="leyenda-deportes"></ul>
+      <div class="tp-chart h-wk" id="g-semanas"></div>
+    </div>
+    <div class="tp-card">
+      <h3>Reparto de los últimos 90 días</h3>
+      <div class="tp-tablewrap"><table class="tp-table" id="t-90">
+        <thead><tr><th>Deporte</th><th class="num">Sesiones</th><th class="num">Horas</th><th class="num">Km</th></tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="tp-section" id="carrera">
+    <h2>Carrera</h2>
+    <div class="tp-grid">
+      <div class="tp-card">
+        <h3>Ritmo medio por salida</h3>
+        <p class="tp-note">Cada punto es una carrera de los últimos 12 meses (tamaño = km). Más arriba es más rápido; la línea es la tendencia.</p>
+        <div class="tp-chart h-sc" id="g-ritmo"></div>
+      </div>
+      <div class="tp-card">
+        <h3>Eficiencia aeróbica</h3>
+        <p class="tp-note">Metros recorridos por latido. Si sube, corres más rápido con el mismo pulso: tu motor mejora.</p>
+        <div class="tp-chart h-sc" id="g-eficiencia"></div>
+      </div>
+    </div>
+    <div class="tp-card">
+      <h3>Mejores ritmos por distancia</h3>
+      <p class="tp-note">La salida más rápida de al menos esa distancia, por ritmo medio. Las series cuentan, así que el 5K puede incluir recuperaciones.</p>
+      <div class="tp-tablewrap"><table class="tp-table" id="t-mejores">
+        <thead><tr><th>Distancia</th><th>Fecha</th><th>Actividad</th><th class="num">Km</th><th class="num">Ritmo /km</th><th class="num">FC media</th></tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="tp-section" id="fuerza">
+    <h2>Fuerza</h2>
+    <div class="tp-card">
+      <h3>1RM estimado por ejercicio, últimos 6 meses</h3>
+      <p class="tp-note">Mejor serie de cada sesión pasada a una repetición máxima estimada (fórmula de Epley). Sale de las series que Hevy publica en la descripción de Strava.</p>
+      <div class="tp-mult" id="g-fuerza"></div>
+      <p class="tp-note" id="fuerza-vacio" hidden>No hay sesiones de fuerza con series registradas en los últimos 6 meses.</p>
+    </div>
+  </section>
+
+  <section class="tp-section" id="recientes">
+    <h2>Últimas actividades</h2>
+    <div class="tp-card">
+      <div class="tp-tablewrap"><table class="tp-table" id="t-recientes">
+        <thead><tr><th>Fecha</th><th>Actividad</th><th>Deporte</th><th class="num">Duración</th><th class="num">Km</th><th class="num">FC media</th><th class="num">Carga</th></tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="tp-section" id="metodo">
+    <h2>Cómo se calcula</h2>
+    <dl class="tp-defs">
+      <div><dt>Carga de una sesión</dt><dd>El Esfuerzo Relativo de Strava si existe; si no, el TRIMP con tu pulso medio (el <span data-v="meta.cobertura_fc">—</span> % de tus actividades tiene pulso o esfuerzo). Sin pulso, se estima por duración y tipo de deporte.</dd></div>
+      <div><dt>Forma y fatiga</dt><dd>Medias móviles exponenciales de la carga diaria: 42 días para la forma y 7 para la fatiga. La frescura es la diferencia.</dd></div>
+      <div><dt>Estimaciones de carrera</dt><dd>Fórmula de Riegel desde tu mejor carrera continua reciente: tiempo × (distancia objetivo ÷ distancia de referencia)<sup>1,06</sup>.</dd></div>
+      <div><dt>Actualización</dt><dd>Los datos se descargan de Strava automáticamente varias veces al día. Lo que subas a Strava aparece en la siguiente actualización.</dd></div>
+    </dl>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
