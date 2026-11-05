@@ -449,6 +449,12 @@
       if ((afinar - ini) / DIA >= 7) fases.push({tipo: o.tipo, objetivo: o.id, desde: iso(ini), hasta: iso(addDays(afinar, -1)), titulo: TEXTO[o.tipo][0].replace('{n}', o.objetivo), texto: TEXTO[o.tipo][1]});
       fases.push({tipo: 'afinar', objetivo: o.id, desde: iso(afinar > ini ? afinar : ini), hasta: iso(dia), titulo: TEXTO.afinar[0].replace('{n}', o.objetivo), texto: TEXTO.afinar[1]});
       ini = addDays(dia, 2);
+      // una semana de recuperación si la siguiente prueba está lo bastante lejos
+      const sig = fut[n + 1];
+      if (sig && (parse(sig.dia) - dia) / DIA >= 28) {
+        fases.push({tipo: 'recuperacion', objetivo: o.id, desde: iso(addDays(dia, 1)), hasta: iso(addDays(dia, 7)), titulo: `Recuperar tras ${o.objetivo}`, texto: 'Una semana suave y corta para asimilar la competición antes del siguiente bloque.'});
+        ini = addDays(dia, 8);
+      }
     });
     if (!fut.length) {
       const p = otros.slice().sort((a, b) => ((a.dia || '9999') < (b.dia || '9999') ? -1 : 1))[0];

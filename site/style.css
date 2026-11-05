@@ -155,6 +155,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .seg button { flex: 1 0 auto; border: 0; background: none; padding: 7px 12px; border-radius: 999px; font-size: .82rem; color: var(--muted); cursor: pointer; }
 .seg button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .seg-view { display: flex; flex-direction: column; gap: 14px; }
+
+/* plan completo */
+.pc-fases { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: .85rem; }
+.pc-fases span { color: var(--muted); }
+.pc-grupo { margin: 6px 0 -4px; font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
+.pc-semana { padding: 12px 14px; gap: 6px; }
+.pc-semana.now { border-color: var(--accent); }
+.pc-semana summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.pc-semana summary::-webkit-details-marker { display: none; }
+.pc-semana summary::after { content: '▾'; position: absolute; right: 14px; top: 12px; color: var(--muted); }
+.pc-semana { position: relative; }
+.pc-semana[open] summary::after { content: '▴'; }
+.pc-top { display: flex; gap: 10px; align-items: baseline; padding-right: 20px; }
+.pc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-tags:empty { display: none; }
 .goal { display: flex; flex-direction: column; gap: 8px; }
 .goal.mini { gap: 6px; }
 .goal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }

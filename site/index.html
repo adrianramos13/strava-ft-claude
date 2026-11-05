@@ -87,14 +87,32 @@
 
   <!-- ============================== SEMANA -->
   <section class="view" id="v-semana" data-title="Semana" hidden>
-    <div class="card" id="plan-form-card">
-      <h2 id="plan-form-titulo">¿Cuántos días vas a entrenar?</h2>
-      <p class="note" id="plan-form-sub">Marca los días que puedes y cuánto tiempo tienes cada uno.</p>
-      <div class="days" id="plan-dias"></div>
-      <div id="plan-minutos" class="minutos"></div>
-      <button class="btn primary wide" id="plan-crear">Proponer entrenos</button>
+    <div class="seg" role="tablist" id="sem-seg">
+      <button role="tab" class="on" data-sseg="semana">Esta semana</button>
+      <button role="tab" data-sseg="completo">Plan completo</button>
     </div>
-    <div id="plan-vista"></div>
+    <div id="ss-semana" class="stack">
+      <div class="card" id="plan-form-card">
+        <h2 id="plan-form-titulo">¿Cuántos días vas a entrenar?</h2>
+        <p class="note" id="plan-form-sub">Marca los días que puedes y cuánto tiempo tienes cada uno.</p>
+        <div class="days" id="plan-dias"></div>
+        <div id="plan-minutos" class="minutos"></div>
+        <button class="btn primary wide" id="plan-crear">Proponer entrenos</button>
+      </div>
+      <div id="plan-vista"></div>
+    </div>
+    <div id="ss-completo" class="stack" hidden>
+      <div class="card" id="pc-form">
+        <h2>Plan de entrenamiento completo</h2>
+        <p class="note">Genera tu plan semana a semana, desde la semana que viene hasta tu último objetivo. Sigue el orden de las fechas: base, el bloque específico de la competición que llega antes, afinado, competición y recuperación, y después el bloque de la siguiente. Los objetivos personales se trabajan a la vez.</p>
+        <p class="note" id="pc-resumen-obj"></p>
+        <p class="note"><b>¿Qué días sueles entrenar?</b></p>
+        <div class="days" id="pc-dias"></div>
+        <div id="pc-minutos" class="minutos"></div>
+        <div class="row-btns"><button class="btn primary wide" id="pc-generar">Generar plan</button><button class="btn" id="pc-cancelar" hidden>Cancelar</button></div>
+      </div>
+      <div id="pc-vista" class="stack"></div>
+    </div>
   </section>
 
   <!-- ============================== AÑADIR -->

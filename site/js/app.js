@@ -75,7 +75,9 @@
   window.addEventListener('hashchange', () => {
     if (location.hash === '#compartido') { ir('inicio'); recogerCompartidos(); } else ir(location.hash.slice(1));
   });
-  $$('.seg button').forEach((b) => b.addEventListener('click', () => { seg = b.dataset.seg; pintarProgreso(); }));
+  $$('#v-progreso .seg button').forEach((b) => b.addEventListener('click', () => { seg = b.dataset.seg; pintarProgreso(); }));
+  let segSem = 'semana';
+  $$('#sem-seg button').forEach((b) => b.addEventListener('click', () => { segSem = b.dataset.sseg; pintarSemana(); }));
 
   function pintar() {
     const n = ST.perfil.nombre;
@@ -265,7 +267,99 @@
   // ------------------------------------------------------------ semana
   const MINUTOS = [30, 45, 60, 75, 90, 120, 150, 180];
   let selDias = null, selMin = null, editandoPlan = false;
+  // editor de días y minutos reutilizable (semana y plan completo)
+  function editorDias(boxDias, boxMin, estado, primero, repintar) {
+    boxDias.replaceChildren();
+    DIAS.forEach((d, i) => {
+      const b = el('button', `day ${estado.dias.has(i) ? 'on' : ''}`, d.slice(0, 2)); b.type = 'button'; b.setAttribute('aria-pressed', estado.dias.has(i)); b.title = d;
+      b.disabled = i < primero;
+      b.onclick = () => { estado.dias.has(i) ? estado.dias.delete(i) : estado.dias.add(i); repintar(); };
+      boxDias.append(b);
+    });
+    boxMin.replaceChildren();
+    [...estado.dias].sort().forEach((i) => {
+      const lab = el('label', 'min-row'); lab.append(el('span', null, DIAS[i]));
+      const s = el('select');
+      MINUTOS.forEach((m) => { const o = el('option', null, m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`); o.value = m; s.append(o); });
+      s.value = estado.min[i] || (i >= 5 ? 90 : 60);
+      s.onchange = () => { estado.min[i] = +s.value; };
+      lab.append(s); boxMin.append(lab);
+    });
+  }
+  const minutosDe = (estado) => { const m = {}; estado.dias.forEach((d) => { m[d] = estado.min[d] || (d >= 5 ? 90 : 60); }); return m; };
+
+  // ---------------------------------------------- plan completo
+  let pc = null, editandoPC = false;
+  function rango(semIso) { const a = parse(semIso), b = addDays(a, 6); return `${a.getUTCDate()} ${window.AN.MES[a.getUTCMonth()]} – ${b.getUTCDate()} ${window.AN.MES[b.getUTCMonth()]}`; }
+  function pintarCompleto() {
+    const plan = ST.ajustes.planCompleto;
+    if (!pc) pc = {dias: new Set(plan ? plan.disponibles : (selDias ? [...selDias] : [1, 3, 5, 6])), min: {...(plan ? plan.minutosDia : {}), ...(ST.ajustes.minutosDia || {})}};
+    const comps = (R ? R.objetivos : []).filter((o) => o.dia && o.dia > iso(hoy())).sort((a, b) => (a.dia < b.dia ? -1 : 1));
+    $('#pc-resumen-obj').textContent = comps.length
+      ? `Orden de tus objetivos: ${comps.map((o, i) => `${i + 1}) ${o.objetivo} (${fechaTxt(parse(o.dia)).replace(/ \d{4}$/, '')})`).join(' → ')}.`
+      : 'No tienes objetivos con fecha: se generarán 12 semanas según tus objetivos personales. Añade fechas en Perfil para un plan hasta tus pruebas.';
+    $('#pc-form').hidden = !!plan && !editandoPC;
+    $('#pc-cancelar').hidden = !plan;
+    editorDias($('#pc-dias'), $('#pc-minutos'), pc, 0, pintarCompleto);
+    $('#pc-generar').disabled = !pc.dias.size;
+    $('#pc-generar').textContent = !pc.dias.size ? 'Elige al menos un día' : plan ? 'Regenerar plan' : 'Generar plan';
+
+    const vista = $('#pc-vista'); vista.replaceChildren();
+    if (!plan) return;
+    const actual = iso(lunes(hoy()));
+    const kmTot = plan.semanas.reduce((s, x) => s + (x.kmCarrera || 0), 0);
+    const head = el('div', 'card');
+    const h = el('div', 'card-head'); h.append(el('h2', null, `Tu plan: ${plan.semanas.length} semanas`));
+    const b = el('button', 'link', 'Cambiar días'); b.onclick = () => { editandoPC = true; pintarCompleto(); window.scrollTo(0, 0); }; h.append(b);
+    head.append(h, el('p', 'note', `Del ${fechaTxt(parse(plan.desde))} al ${fechaTxt(addDays(parse(plan.hasta), 6))} · ${plan.disponibles.length} días por semana · ${nf(kmTot)} km de carrera en total. Generado el ${fechaTxt(new Date(plan.creado))}.`));
+    // fases en orden con su número de semanas
+    const fasesUl = el('ol', 'pc-fases');
+    const grupos = [];
+    plan.semanas.forEach((s) => { const g = grupos[grupos.length - 1]; if (g && g.fase === s.fase) g.semanas.push(s); else grupos.push({fase: s.fase, semanas: [s]}); });
+    grupos.forEach((g) => { const li = el('li'); li.append(el('b', null, g.fase), el('span', null, ` · ${g.semanas.length} ${g.semanas.length === 1 ? 'semana' : 'semanas'} · desde el ${rango(g.semanas[0].semana).split(' – ')[0]}`)); fasesUl.append(li); });
+    head.append(fasesUl);
+    head.append(el('p', 'note', 'Cada domingo, en «Esta semana», la app recalcula la semana con tus datos reales. Si cambias tus objetivos, regenera el plan.'));
+    vista.append(head);
+    const abierta = (plan.semanas.find((x) => x.semana >= actual) || {}).semana;
+    grupos.forEach((g) => {
+      vista.append(el('h3', 'pc-grupo', g.fase));
+      g.semanas.forEach((s) => {
+        const d = el('details', `card pc-semana${s.semana === actual ? ' now' : ''}`);
+        if (s.semana === abierta) d.open = true;
+        const sum = el('summary');
+        const t = el('div', 'pc-top'); t.append(el('b', null, `Semana ${s.numero}`), el('span', 'ses-meta', rango(s.semana)));
+        const tags = el('div', 'pc-tags');
+        if (s.semana === actual) tags.append(el('span', 'chip is-ok', 'esta semana'));
+        if (s.competicion) tags.append(el('span', 'chip is-bad', `competición: ${s.competicion}`));
+        if (s.recuperacion) tags.append(el('span', 'chip is-muted', 'recuperación'));
+        if (s.descarga) tags.append(el('span', 'chip is-warn', 'descarga'));
+        const m = el('span', 'ses-meta', `${s.sesiones.length} sesiones · ${nf(s.horas, 1)} h${s.kmCarrera ? ` · ${s.kmCarrera} km de carrera` : ''}`);
+        sum.append(t, tags, m);
+        d.append(sum);
+        s.notas.forEach((n) => d.append(el('p', 'callout', n)));
+        const box = el('div'); listaSesiones(box, s, false); d.append(box);
+        vista.append(d);
+      });
+    });
+  }
+  $('#pc-generar').addEventListener('click', async () => {
+    if (!pc.dias.size) return;
+    const minutos = minutosDe(pc);
+    const desde = iso(addDays(lunes(hoy()), 7));
+    ST.ajustes.planCompleto = window.PLAN.generarCompleto(R, ST.perfil, desde, [...pc.dias], minutos);
+    ST.ajustes.minutosDia = {...(ST.ajustes.minutosDia || {}), ...minutos};
+    editandoPC = false;
+    await guardar('ajustes');
+    toast(`Plan generado: ${ST.ajustes.planCompleto.semanas.length} semanas`);
+    pintarCompleto(); window.scrollTo(0, 0);
+  });
+  $('#pc-cancelar').addEventListener('click', () => { editandoPC = false; pintarCompleto(); });
+
   function pintarSemana() {
+    $$('#sem-seg button').forEach((b) => { b.classList.toggle('on', b.dataset.sseg === segSem); b.setAttribute('aria-selected', b.dataset.sseg === segSem); });
+    $('#ss-semana').hidden = segSem !== 'semana';
+    $('#ss-completo').hidden = segSem !== 'completo';
+    if (segSem === 'completo') { pintarCompleto(); return; }
     const w = semanaObjetivo(), wIso = iso(w);
     const plan = ST.planes[wIso];
     const prev = ST.planes[iso(addDays(w, -7))] || Object.values(ST.planes).sort((a, b) => (a.semana < b.semana ? 1 : -1))[0];
@@ -402,7 +496,7 @@
 
   // ------------------------------------------------------------ progreso
   function pintarProgreso() {
-    $$('.seg button').forEach((b) => { b.classList.toggle('on', b.dataset.seg === seg); b.setAttribute('aria-selected', b.dataset.seg === seg); });
+    $$('#v-progreso .seg button').forEach((b) => { b.classList.toggle('on', b.dataset.seg === seg); b.setAttribute('aria-selected', b.dataset.seg === seg); });
     $$('.seg-view').forEach((v) => { v.hidden = v.id !== `s-${seg}`; });
     if (!R) return;
     const sinDatos = (box) => box.replaceChildren(el('p', 'note', 'Importa tu Strava o añade entrenos para ver esta gráfica.'));

@@ -3,7 +3,8 @@
   const {iso, parse, addDays, ritmo} = window.AN;
   const NOMBRE_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-  function proponer(R, perfil, semanaIso, disponibles, minutosDia) {
+  // opts.futuro: semana de un plan a largo plazo (no se ajusta por el cansancio de hoy)
+  function proponer(R, perfil, semanaIso, disponibles, minutosDia, opts = {}) {
     const w0 = parse(semanaIso);
     const fin = addDays(w0, 6);
     const objetivos = (R ? R.objetivos : []) || [];
@@ -14,6 +15,8 @@
     const tieneHyrox = futuros.some((o) => o.tipo === 'hyrox');
     const carrera = futuros.find((o) => o.tipo === 'carrera');
     const competicion = objetivos.find((o) => o.competicion && o.dia >= semanaIso && o.dia <= iso(fin));
+    // semana siguiente a una competición: recuperación (salvo que haya otra prueba esta misma semana)
+    const recien = !competicion && objetivos.find((o) => o.competicion && o.dia < semanaIso && o.dia >= iso(addDays(w0, -7)));
     // objetivos sin competición que siguen activos (peso, fuerza, forma, volumen, otros)
     const otros = objetivos.filter((o) => !o.competicion && o.estado !== 'conseguido' && (!o.dia || o.dia >= semanaIso));
     const pesoObj = otros.find((o) => o.foco === 'peso');
@@ -34,27 +37,45 @@
 
     // volumen de carrera de la semana
     const plan = R ? R.kmSemana.find((s) => s.semana === semanaIso) : null;
-    let km = plan && plan.km_plan != null ? plan.km_plan : 20;
+    // fuera del horizonte del plan de km (después de la carrera principal) se mantiene un volumen de carrera moderado
+    const maxPlan = R ? Math.max(0, ...R.kmSemana.map((s) => s.km_plan || 0)) : 0;
+    let km = plan && plan.km_plan != null ? plan.km_plan : (maxPlan ? Math.round(maxPlan * 0.6) : 20);
     const notas = [];
     if (volObj && volObj.deporte === 'run' && volObj.km_semana_necesarios) km = Math.max(km, Math.round(volObj.km_semana_necesarios));
     let factor = 1;
-    if (R && R.estado.frescura < -25) { factor = 0.8; notas.push(`Vienes muy cargado (frescura ${R.estado.frescura}): bajo el volumen un 20 % y quito intensidad.`); }
-    if (plan && plan.descarga) notas.push('Semana de descarga: menos volumen para asimilar lo entrenado.');
+    if (!opts.futuro && R && R.estado && R.estado.frescura < -25) { factor = 0.8; notas.push(`Vienes muy cargado (frescura ${R.estado.frescura}): bajo el volumen un 20 % y quito intensidad.`); }
+    if (plan && plan.descarga && !competicion && !recien) notas.push('Semana de descarga: menos volumen para asimilar lo entrenado.');
+    if (recien) { factor = 0.5; notas.push(`Semana de recuperación tras ${recien.objetivo}: todo suave y corto. Vuelve a apretar solo si las piernas responden.`); }
     km *= factor;
 
     const capLargo = carrera ? (carrera.distancia_km <= 10 ? 14 : carrera.distancia_km <= 21.1 ? 20 : 32) : tieneHyrox ? 16 : 15;
     // la tirada larga no baja de lo que ya has hecho hace poco (sin pasar del tope del objetivo)
     const reciente = R && R.largo8 ? Math.round(R.largo8 * 0.9) : 0;
-    const largoKm = Math.max(6, Math.min(capLargo, Math.max(Math.round(km * 0.33), reciente)));
+    // progresa desde lo que haces ahora hasta el tope del objetivo a medida que sube el volumen del plan
+    const kmIni = R ? ((R.kmSemana.find((s) => s.km_plan != null) || {}).km_plan || km) : km;
+    const progreso = maxPlan > kmIni ? Math.max(0, Math.min(1, (km - kmIni) / (maxPlan - kmIni))) : 0;
+    const baseLargo = Math.min(capLargo, Math.max(Math.round(km * 0.33), reciente));
+    const largoKm = Math.max(6, Math.round(baseLargo + (capLargo - baseLargo) * progreso));
     const dur = (kms, p) => Math.round(kms * p + 10);
 
     const S = {
       largo: () => ({sport: 'run', dura: true, larga: true, titulo: 'Tirada larga', km: largoKm, min: dur(largoKm, z.largo),
         detalle: fase.tipo === 'carrera' ? `${largoKm} km suaves (${rango(z.largo)}); los últimos ${Math.min(5, Math.round(largoKm / 4))} km a ritmo objetivo (${rz(z.tempo)}).` : `${largoKm} km a ritmo cómodo (${rango(z.largo)}), pudiendo hablar.`}),
-      series: () => ({sport: 'run', dura: true, titulo: 'Series', km: 8, min: 55,
-        detalle: `15 min de calentamiento, ${fase.tipo === 'base' ? '8 × 400 m' : '5 × 1 km'} a ${rz(z.series)} con 2 min de trote suave entre series, y 10 min de vuelta a la calma.`}),
-      tempo: () => ({sport: 'run', dura: true, titulo: 'Tempo a ritmo objetivo', km: 10, min: 60,
-        detalle: `15 min suaves, 2 × 15–20 min a ${rz(z.tempo)} con 3 min suaves entre medias, y 10 min de vuelta a la calma.`}),
+      // las series y el tempo crecen con el progreso del plan (y bajan en semanas de descarga)
+      series: () => {
+        const base = fase.tipo === 'base';
+        const reps = base ? 6 + Math.round(progreso * 4) : 4 + Math.round(progreso * 3);
+        const tramo = base ? 400 : 1000;
+        const k = Math.round(5 + reps * tramo / 1000 * 1.4);
+        return {sport: 'run', dura: true, titulo: 'Series', km: k, min: Math.round(30 + reps * (base ? 3.5 : 6.5)),
+          detalle: `15 min de calentamiento, ${reps} × ${tramo === 1000 ? '1 km' : '400 m'} a ${rz(z.series)} con ${base ? '90 s' : '2 min'} de trote suave entre series, y 10 min de vuelta a la calma.`};
+      },
+      tempo: () => {
+        const bloque = 10 + Math.round(progreso * 3) * 5;  // 10 → 25 min
+        const k = Math.round(5 + (2 * bloque) / z.tempo);
+        return {sport: 'run', dura: true, titulo: 'Tempo a ritmo objetivo', km: k, min: 30 + 2 * bloque + 3,
+          detalle: `15 min suaves, 2 × ${bloque} min a ${rz(z.tempo)} con 3 min suaves entre medias, y 10 min de vuelta a la calma.`};
+      },
       suave: (n = 1) => { const k = Math.max(6, Math.min(10, Math.round(km * 0.2))); return {sport: 'run', titulo: n > 1 ? 'Rodaje suave (2)' : 'Rodaje suave', km: k, min: dur(k, z.suave), detalle: `${k} km en Z2 (${rango(z.suave)}). Tiene que parecerte fácil.`}; },
       fuerza: (n = 1) => ({sport: 'strength', titulo: n > 1 ? 'Fuerza: tren superior y core' : 'Fuerza: pierna y core', min: 55,
         detalle: n > 1 ? 'Press, remo, dominadas o jalón y core. 3–4 series de 6–10 repeticiones.' : 'Sentadilla, peso muerto o hip thrust, zancadas y core. 3–4 series de 5–8 repeticiones, sin llegar al fallo.'}),
@@ -111,6 +132,9 @@
       const act = dc === 'bike' ? () => ({...S.biciSuave(), titulo: 'Activación en bici', min: 45, detalle: '30 min suaves con 4 × 1 min a ritmo de competición.'})
         : dc === 'swim' ? () => ({...S.nado(1), titulo: 'Activación en el agua', min: 30, detalle: '1.000 m suaves con 4 × 50 m a ritmo de prueba.'}) : S.activacion;
       prioridad = [act, S.suave, S.movilidad, S.fuerza, S.suave, S.movilidad, S.movilidad];
+    } else if (recien) {
+      prioridad = [S.suave, S.movilidad, () => ({...S.fuerzaTotal(1), titulo: 'Fuerza ligera', detalle: 'Circuito suave de cuerpo completo con poco peso, sin llegar a cansarte. Solo para activar.'}),
+        () => S.cardioZ2(false), () => S.suave(2), S.movilidad, () => S.cardioZ2(false, 2)];
     }
     else if (fase.tipo === 'carrera') prioridad = [S.largo, S.tempo, S.fuerza, S.suave, S.series, tieneTri ? S.nado : () => S.suave(2), S.movilidad];
     else if (fase.tipo === 'hyrox') prioridad = [S.hyrox, S.largo, S.fuerza, S.series, () => (Math.round((w0 - parse(fase.desde)) / 6048e5) % 3 === 2 ? S.simulacro() : S.hyrox()), S.suave, () => S.fuerza(2)];
@@ -198,8 +222,25 @@
     });
     out.sort((a, b) => (a.dia < b.dia ? -1 : 1));
     const kmTot = out.reduce((s, x) => s + (x.sport === 'run' && x.km ? x.km : 0), 0);
-    return {semana: semanaIso, fase: fase.titulo, faseTipo: fase.tipo, sesiones: out, kmCarrera: kmTot, notas, creado: new Date().toISOString(), disponibles: dias, minutosDia};
+    return {semana: semanaIso, fase: fase.titulo, faseTipo: fase.tipo, sesiones: out, kmCarrera: kmTot, notas, creado: new Date().toISOString(), disponibles: dias, minutosDia,
+      descarga: !!(plan && plan.descarga) && !competicion && !recien, competicion: competicion ? competicion.objetivo : null, recuperacion: recien ? recien.objetivo : null,
+      horas: Math.round(out.reduce((s, x) => s + (x.min || 0), 0) / 6) / 10};
   }
 
-  window.PLAN = {proponer, NOMBRE_DIA};
+  // Plan completo: una propuesta por semana desde el lunes indicado hasta el último objetivo con fecha (o 12 semanas).
+  function generarCompleto(R, perfil, desdeIso, disponibles, minutosDia) {
+    const w0 = parse(desdeIso);
+    const fechas = ((R && R.objetivos) || []).filter((o) => o.dia && o.dia >= desdeIso).map((o) => o.dia).sort();
+    const ultimo = fechas.length ? parse(fechas[fechas.length - 1]) : addDays(w0, 7 * 11);
+    const semanas = [];
+    for (let w = w0, n = 1; w <= ultimo && n <= 80; w = addDays(w, 7), n++) {
+      const p = proponer(R, perfil, iso(w), disponibles, minutosDia, {futuro: true});
+      p.numero = n;
+      semanas.push(p);
+    }
+    return {creado: new Date().toISOString(), desde: desdeIso, hasta: semanas.length ? semanas[semanas.length - 1].semana : desdeIso,
+      disponibles: [...disponibles], minutosDia: {...minutosDia}, semanas};
+  }
+
+  window.PLAN = {proponer, generarCompleto, NOMBRE_DIA};
 })();
