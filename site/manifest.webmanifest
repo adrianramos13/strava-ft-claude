@@ -1,7 +1,8 @@
 {
-  "name": "Panel de entreno",
+  "name": "Entreno",
   "short_name": "Entreno",
-  "start_url": "./",
+  "description": "Tu panel de entrenamiento: forma, objetivos y plan semanal.",
+  "start_url": "./#inicio",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f6f7f4",
@@ -9,7 +10,11 @@
   "lang": "es",
   "icons": [
     {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
     {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ],
+  "shortcuts": [
+    {"name": "Añadir entreno", "url": "./#anadir"},
+    {"name": "Plan de la semana", "url": "./#semana"}
   ]
 }
