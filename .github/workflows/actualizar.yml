@@ -27,5 +27,19 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+      # si una publicación anterior se quedó colgada "en curso", GitHub bloquea las nuevas: se cancela antes de publicar
+      - name: Cancelar publicaciones colgadas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for sha in $(gh api "repos/${{ github.repository }}/deployments?environment=github-pages&per_page=10" --jq '.[].sha' | sort -u); do
+            [ "$sha" = "${{ github.sha }}" ] && continue
+            estado=$(gh api "repos/${{ github.repository }}/pages/deployments/$sha" --jq '.status' 2>/dev/null || echo "?")
+            echo "$sha: $estado"
+            case "$estado" in
+              deployment_queued|deployment_in_progress|syncing_files|updating_pages|deployment_attempted)
+                gh api -X POST "repos/${{ github.repository }}/pages/deployments/$sha/cancel" && echo "  cancelada" || echo "  no se pudo cancelar";;
+            esac
+          done
       - id: deploy
         uses: actions/deploy-pages@v4
