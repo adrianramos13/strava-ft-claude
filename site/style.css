@@ -206,3 +206,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: max-content; max-width: calc(100vw - 32px); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .88rem; box-shadow: 0 8px 24px rgb(0 0 0 / .2); }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: sube .25s ease-out; } @keyframes sube { from { opacity: 0; transform: translate(-50%, 8px); } } }
 .day:disabled { opacity: .3; cursor: default; }
+/* en las gráficas, el arrastre horizontal recorre los datos y el vertical sigue desplazando la página */
+.chart, .mcell svg { touch-action: pan-y; -webkit-user-select: none; user-select: none; }

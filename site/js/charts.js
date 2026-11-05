@@ -37,6 +37,28 @@
   };
   const vacio = (box, txt) => box.replaceChildren(el('p', 'note', txt));
 
+  // Una sola zona sensible para gráficas de barras: el dedo o el ratón puede deslizarse de una columna a otra.
+  function barrido(s, x, rows, key, y0, y1, mostrar, ocultar) {
+    const hl = s.append('rect').attr('fill', css('--fg')).attr('fill-opacity', 0.07).attr('rx', 3).attr('opacity', 0).attr('pointer-events', 'none');
+    let actual = -1;
+    const elegir = (ev) => {
+      const [px] = d3.pointer(ev, s.node());
+      const i = Math.max(0, Math.min(rows.length - 1, Math.floor((px - x.range()[0]) / x.step())));
+      if (i === actual) return;
+      actual = i;
+      const r = rows[i];
+      hl.attr('x', x(r[key]) - 2).attr('width', x.bandwidth() + 4).attr('y', y0).attr('height', y1 - y0).attr('opacity', 1);
+      mostrar(r);
+    };
+    const salir = () => { actual = -1; hl.attr('opacity', 0); ocultar(); };
+    s.append('rect').attr('class', 'hit').attr('x', x.range()[0]).attr('width', x.range()[1] - x.range()[0]).attr('y', y0).attr('height', y1 - y0).attr('fill', 'transparent')
+      .on('pointerdown pointermove', elegir)
+      // con el dedo, al soltar se queda visible la última semana para poder leerla
+      .on('pointerleave', (ev) => { if (ev.pointerType !== 'touch') salir(); })
+      .on('pointercancel', salir);
+    d3.select(s.node().parentNode).on('pointerdown.barrido', (ev) => { if (ev.target.getAttribute('class') !== 'hit') salir(); });
+  }
+
   function plan(box, R) {
     const c = S();
     const rows = R.kmSemana.map((r) => ({...r, d: day(r.semana)}));
@@ -69,14 +91,13 @@
     s.append('line').attr('x1', ml).attr('x2', W - 4).attr('y1', H - mb).attr('y2', H - mb).attr('stroke', css('--axis'));
     s.append('g').selectAll('text').data(rows.filter((_, i) => i % every === 0)).join('text').attr('class', 'tick').attr('x', (r) => x(r.semana) + x.bandwidth() / 2).attr('y', H - mb + 16).attr('text-anchor', 'middle').text((r) => corto(r.d));
     const tt = tip(box);
-    s.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.semana) - x.step() * x.paddingInner() / 2).attr('width', x.step()).attr('y', mt).attr('height', H - mb - mt).attr('fill', 'transparent')
-      .on('pointerenter', (ev, r) => {
-        const lines = [];
-        if (r.km_real != null) lines.push({c: c[0], n: 'Real', v: `${nf(r.km_real, 1)} km`});
-        if (r.km_plan != null) lines.push({c: c[1], n: 'Plan', v: `${nf(r.km_plan)} km`});
-        tt.show(x(r.semana) + x.bandwidth() / 2, y(Math.max(r.km_real || 0, r.km_plan || 0)) + 20, `Semana del ${fecha(r.d)}`, lines);
-      })
-      .on('pointerleave', () => tt.hide());
+    barrido(s, x, rows, 'semana', mt, H - mb, (r) => {
+      const lines = [];
+      if (r.km_real != null) lines.push({c: c[0], n: 'Real', v: `${nf(r.km_real, 1)} km`});
+      if (r.km_plan != null) lines.push({c: c[1], n: 'Plan', v: `${nf(r.km_plan)} km`});
+      if (!lines.length) lines.push({n: 'Sin datos', v: ''});
+      tt.show(x(r.semana) + x.bandwidth() / 2, y(Math.max(r.km_real || 0, r.km_plan || 0)) + 20, `Semana del ${fecha(r.d)}`, lines);
+    }, () => tt.hide());
   }
 
   function pmc(box, R) {
@@ -136,13 +157,11 @@
     s.append('line').attr('x1', ml).attr('x2', W - 4).attr('y1', H - mb).attr('y2', H - mb).attr('stroke', css('--axis'));
     s.append('g').selectAll('text').data(rows.filter((_, i) => i % every === 0)).join('text').attr('class', 'tick').attr('x', (r) => x(r.semana) + x.bandwidth() / 2).attr('y', H - mb + 16).attr('text-anchor', 'middle').text((r) => corto(r.d));
     const tt = tip(box);
-    s.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.semana) - x.step() * x.paddingInner() / 2).attr('width', x.step()).attr('y', 10).attr('height', H - mb - 10).attr('fill', 'transparent')
-      .on('pointerenter', (ev, r) => {
-        const lines = ORDEN.map((k, i) => ({k, i})).filter((o) => r[o.k] > 0).map((o) => ({c: c[o.i], n: ETIQUETA[o.k], v: `${nf(r[o.k], 1)} h`}));
-        lines.push({n: 'Total', v: `${nf(tot(r), 1)} h`});
-        tt.show(x(r.semana) + x.bandwidth() / 2, y(tot(r)) + 20, `Semana del ${fecha(r.d)}`, lines);
-      })
-      .on('pointerleave', () => tt.hide());
+    barrido(s, x, rows, 'semana', 10, H - mb, (r) => {
+      const lines = ORDEN.map((k, i) => ({k, i})).filter((o) => r[o.k] > 0).map((o) => ({c: c[o.i], n: ETIQUETA[o.k], v: `${nf(r[o.k], 1)} h`}));
+      lines.push({n: 'Total', v: `${nf(tot(r), 1)} h`});
+      tt.show(x(r.semana) + x.bandwidth() / 2, y(tot(r)) + 20, `Semana del ${fecha(r.d)}`, lines);
+    }, () => tt.hide());
   }
 
   function scatter(box, R, field, invert, fmt) {

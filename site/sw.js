@@ -1,5 +1,5 @@
 /* Service worker: la app funciona sin conexión y avisa los domingos donde el navegador lo permite. */
-const VERSION = 'entreno-v4';
+const VERSION = 'entreno-v5';
 const APP = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png',
   'js/analysis.js', 'js/importar.js', 'js/planner.js', 'js/charts.js', 'js/app.js',
   'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'];
