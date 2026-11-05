@@ -49,7 +49,7 @@
   });
   const hoy = () => hoyUTC();
   const semanaObjetivo = () => { const h = hoy(); return h.getUTCDay() === 0 ? addDays(h, 1) : lunes(h); };  // el domingo se planifica la siguiente
-  const nivelObj = (e) => (e === 'en camino' ? 'ok' : e === 'exigente' ? 'bad' : 'warn');
+  const nivelObj = (e) => ({'en camino': 'ok', 'conseguido': 'ok', 'alcanzable': 'warn', 'exigente': 'bad'}[e] || 'muted');
 
   function recalcular() {
     try { R = analizar(ST.acts, ST.perfil); } catch (e) { console.error(e); R = null; toast('No he podido calcular las métricas: ' + e.message); }
@@ -172,10 +172,10 @@
       const b = el('button', 'btn primary', 'Planificar ahora'); b.dataset.goto = 'semana'; box.append(b);
     }
 
-    // próximo objetivo
-    const fut = R.objetivos.filter((o) => o.dia >= iso(h)).sort((a, b) => (a.dia < b.dia ? -1 : 1));
-    $('#i-objetivo-card').hidden = !fut.length;
-    if (fut.length) $('#i-objetivo').replaceChildren(tarjetaObjetivo(fut[0], true));
+    // todos los objetivos
+    const objs = objetivosOrdenados();
+    $('#i-objetivo-card').hidden = !objs.length;
+    $('#i-objetivo').replaceChildren(...objs.map((o) => tarjetaObjetivo(o, true)));
 
     // últimos
     const ul = $('#i-ultimos'); ul.replaceChildren();
@@ -199,17 +199,55 @@
     return li;
   }
 
+  // activos por fecha (los que no tienen fecha, detrás) y los ya pasados al final
+  function objetivosOrdenados() {
+    const h = iso(hoy());
+    const clave = (o) => (o.dia && o.dia < h ? '2' : o.dia ? '0' + o.dia : '1');
+    return (R ? R.objetivos : []).slice().sort((a, b) => (clave(a) < clave(b) ? -1 : 1));
+  }
+
+  // registro rápido de peso (objetivos de peso)
+  function formPeso(o) {
+    const f = el('form', 'peso-form');
+    const inp = el('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.autocomplete = 'off';
+    inp.placeholder = 'Peso de hoy (kg)'; inp.setAttribute('aria-label', 'Peso de hoy en kg'); inp.id = `peso-${o.id}-${Math.random().toString(36).slice(2, 6)}`;
+    const b = el('button', 'btn small primary', 'Guardar'); b.type = 'submit';
+    f.append(inp, b);
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const v = parseFloat(String(inp.value).replace(',', '.'));
+      if (!(v >= 30 && v <= 250)) { toast('Escribe tu peso en kg, por ejemplo 78,5'); return; }
+      const dia = iso(hoy());
+      ST.perfil.pesos = (ST.perfil.pesos || []).filter((p) => p.dia !== dia).concat({dia, kg: v});
+      await guardar('perfil'); recalcular(); toast(`Peso guardado: ${nf(v, 1)} kg`);
+    };
+    return f;
+  }
+
   function tarjetaObjetivo(o, mini) {
     const c = el('article', mini ? 'goal mini' : 'goal card');
+    const pasado = o.dia && o.dia < iso(hoy());
+    if (pasado) c.classList.add('past');
     const head = el('div', 'goal-head'); head.append(el('b', 'goal-name', o.objetivo), el('span', `chip is-${nivelObj(o.estado)}`, o.estado));
-    const n = Math.round((parse(o.dia) - hoy()) / 864e5);
-    const aprox = !/^\d/.test(o.fecha_txt);
-    c.append(head, el('span', 'tnote', `${o.fecha_txt} · ${n > 0 ? `${aprox ? 'unos ' : ''}${nf(n)} días` : n === 0 ? 'hoy' : 'ya pasó'}`));
-    const nums = el('div', 'goal-nums');
-    const diff = o.diferencia_min == null ? '—' : `${o.diferencia_min > 0 ? '+' : '−'}${nf(Math.abs(o.diferencia_min), 1)} min`;
-    [['Meta', o.meta], ['Nivel actual', o.estimacion], ['Diferencia', diff]].forEach(([k, v]) => { const d = el('div'); d.append(el('span', 'tlabel', k), el('span', 'big', v)); nums.append(d); });
-    c.append(nums);
-    if (!mini) {
+    let cuando = o.fecha_txt;
+    if (o.dia) {
+      const n = Math.round((parse(o.dia) - hoy()) / 864e5);
+      const aprox = !/^\d/.test(o.fecha_txt);
+      cuando += ` · ${n > 0 ? `${aprox ? 'unos ' : ''}${nf(n)} días` : n === 0 ? 'hoy' : 'ya pasó'}`;
+    }
+    c.append(head, el('span', 'tnote', cuando));
+    if (o.nums) {
+      const nums = el('div', 'goal-nums');
+      o.nums.forEach(([k, v]) => { const d = el('div'); d.append(el('span', 'tlabel', k), el('span', 'big', v)); nums.append(d); });
+      c.append(nums);
+    } else if (o.base) c.append(el('p', 'note', o.base));
+    if (o.progreso != null) {
+      const bar = el('div', 'progress'); bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuenow', Math.round(o.progreso * 100)); bar.setAttribute('aria-valuemin', 0); bar.setAttribute('aria-valuemax', 100);
+      const fill = el('span', `is-${nivelObj(o.estado)}`); fill.style.width = `${Math.round(o.progreso * 100)}%`; bar.append(fill);
+      c.append(bar);
+    }
+    if (o.tipo === 'peso' && !pasado) c.append(formPeso(o));
+    if (!mini && o.nums) {
       c.append(el('p', 'note', o.base));
       o.notas.forEach((t) => c.append(el('p', 'note', t)));
       if (o.tipo === 'carrera' && o.ref_km) {
@@ -371,7 +409,7 @@
     if (seg === 'objetivos') {
       const g = $('#goals'); g.replaceChildren();
       if (!R.objetivos.length) { const p = el('p', 'note card', 'Aún no tienes objetivos. Añádelos en Perfil.'); g.append(p); }
-      R.objetivos.forEach((o) => g.append(tarjetaObjetivo(o)));
+      objetivosOrdenados().forEach((o) => g.append(tarjetaObjetivo(o)));
       window.CH.plan($('#g-plan'), R);
       const ol = $('#fases'); ol.replaceChildren();
       const h = iso(hoy());
@@ -379,6 +417,7 @@
         const ahora = f.desde <= h && h <= f.hasta;
         const li = el('li', ahora ? 'now' : '');
         const w = el('span', 'what'); w.append(el('strong', null, f.titulo), el('span', null, f.texto));
+        if (f.paralelo) w.append(el('em', null, f.paralelo));
         li.append(el('span', 'when', f.cuando + (ahora ? ' · ahora' : '')), w); ol.append(li);
       });
     } else if (seg === 'carga') {
@@ -422,13 +461,17 @@
       ? `Última importación: ${fechaTxt(new Date(ult.fecha))} (${nf(ult.n)} actividades). ${Math.floor((Date.now() - new Date(ult.fecha)) / 864e5) >= 7 ? 'Toca actualizar.' : 'Al día.'}`
       : 'Aún no has importado tu Strava.';
     const ul = $('#obj-lista'); ul.replaceChildren();
-    const objs = (ST.perfil.objetivos || []).slice().sort((a, b) => (a.dia < b.dia ? -1 : 1));
-    if (!objs.length) ul.append(el('li', 'note', 'Sin objetivos. Añade tu próxima carrera para que el plan se adapte a ella.'));
+    const objs = (ST.perfil.objetivos || []).slice().sort((a, b) => ((a.dia || '9') < (b.dia || '9') ? -1 : 1));
+    if (!objs.length) ul.append(el('li', 'note', 'Sin objetivos. Añade lo que quieras conseguir (estar en forma, bajar peso, una carrera…) para que el plan se adapte.'));
+    const TIPO = {forma: 'Estar en forma', peso: 'Peso', fuerza: 'Fuerza', volumen: 'Volumen', otro: 'Otro', carrera: 'Carrera', hyrox: 'HYROX', triatlon: 'Triatlón'};
     objs.forEach((o) => {
       const li = el('li', 'obj');
       const b = el('div', 'act-body');
-      const meta = o.meta_min ? `${Math.floor(o.meta_min / 60)}:${String(o.meta_min % 60).padStart(2, '0')}` : 'sin meta';
-      b.append(el('b', null, o.objetivo), el('div', 'act-meta', `${fechaTxt(parse(o.dia))} · meta ${meta}`));
+      const meta = o.meta_min ? `meta ${Math.floor(o.meta_min / 60)}:${String(o.meta_min % 60).padStart(2, '0')}`
+        : o.tipo === 'peso' ? `de ${nf(o.peso_inicial, 1)} a ${nf(o.peso_objetivo, 1)} kg`
+          : o.tipo === 'fuerza' ? `${o.ejercicio}: ${nf(o.rm_objetivo, 1)} kg`
+            : o.tipo === 'forma' ? `${o.dias_semana} días/semana` : o.tipo === 'volumen' ? `${nf(o.km_objetivo)} km` : '';
+      b.append(el('b', null, o.objetivo), el('div', 'act-meta', [TIPO[o.tipo], o.dia ? fechaTxt(parse(o.dia)) : 'sin fecha', meta].filter(Boolean).join(' · ')));
       const ed = el('button', 'link', 'Editar'); ed.onclick = () => abrirObjetivo(o);
       const x = el('button', 'icon-btn', '×'); x.setAttribute('aria-label', 'Borrar objetivo');
       x.onclick = async () => { if (await confirmar('Borrar objetivo', `¿Borrar «${o.objetivo}»?`, 'Borrar')) { ST.perfil.objetivos = ST.perfil.objetivos.filter((y) => y.id !== o.id); await guardar('perfil'); recalcular(); } };
@@ -444,34 +487,64 @@
     await guardar('perfil'); recalcular(); toast('Perfil guardado');
   });
 
+  const COMP = window.AN.COMPETICION;
+  const EJEMPLO = {forma: 'Estar en forma', peso: 'Bajar 10 kg', fuerza: 'Sentadilla a 100 kg', volumen: 'Correr 1.000 km este año', otro: 'Subir el Teide andando',
+    carrera: 'Media maratón de Madrid', hyrox: 'HYROX Madrid', triatlon: 'Triatlón de Valencia'};
+  const num = (id) => { const v = parseFloat(String($(id).value).replace(',', '.')); return Number.isFinite(v) ? v : null; };
   function abrirObjetivo(o) {
     const f = $('#f-obj'); f.hidden = false;
-    $('#o-id').value = o ? o.id : '';
-    $('#o-tipo').value = o ? o.tipo : 'carrera';
-    $('#o-nombre').value = o ? o.objetivo : '';
-    $('#o-dist').value = o && o.distancia_km ? String(o.distancia_km) : '21.0975';
-    $('#o-tri').value = o && o.distancia ? o.distancia : 'olimpico';
-    $('#o-dia').value = o ? o.dia : '';
-    $('#o-h').value = o && o.meta_min ? Math.floor(o.meta_min / 60) : '';
-    $('#o-m').value = o && o.meta_min ? o.meta_min % 60 : '';
+    const v = (id, x) => { $(id).value = x == null ? '' : x; };
+    v('#o-id', o && o.id); v('#o-tipo', o ? o.tipo : 'forma'); v('#o-nombre', o && o.objetivo);
+    v('#o-dist', o && o.distancia_km ? String(o.distancia_km) : '21.0975'); v('#o-tri', (o && o.distancia) || 'olimpico');
+    v('#o-dia', o && o.dia);
+    v('#o-h', o && o.meta_min ? Math.floor(o.meta_min / 60) : null); v('#o-m', o && o.meta_min ? o.meta_min % 60 : null);
+    const pesos = ST.perfil.pesos || [];
+    v('#o-peso-ini', o ? o.peso_inicial : (pesos.length ? pesos[pesos.length - 1].kg : null)); v('#o-peso-obj', o && o.peso_objetivo);
+    v('#o-ej', o && o.ejercicio); v('#o-rm', o && o.rm_objetivo);
+    v('#o-dias', (o && o.dias_semana) || 4); v('#o-forma', o && o.forma_objetivo);
+    v('#o-dep', (o && o.deporte) || 'run'); v('#o-km', o && o.km_objetivo); v('#o-desde', (o && o.desde) || iso(hoy()));
+    v('#o-enfoque', (o && o.enfoque) || 'forma'); v('#o-nota', o && o.nota);
+    const dl = $('#o-ej-lista'); dl.replaceChildren(...((R && R.ejercicios) || []).map((e) => { const op = el('option'); op.value = e; return op; }));
     tipoObjetivo();
     f.scrollIntoView({behavior: 'smooth', block: 'center'});
   }
-  function tipoObjetivo() { const t = $('#o-tipo').value; $('#o-dist-wrap').hidden = t !== 'carrera'; $('#o-tri-wrap').hidden = t !== 'triatlon'; }
+  function tipoObjetivo() {
+    const t = $('#o-tipo').value;
+    $$('#f-obj [data-tipos]').forEach((x) => { x.hidden = !x.dataset.tipos.split(',').includes(t); });
+    const comp = COMP.includes(t);
+    $('#o-dia').required = comp || t === 'peso' || t === 'volumen';
+    $('#o-dia-label').textContent = comp ? 'Fecha de la competición' : $('#o-dia').required ? 'Fecha límite' : 'Fecha límite (opcional)';
+    $('#o-nombre').placeholder = `Por ejemplo: ${EJEMPLO[t]}`;
+    $('#o-peso-ini').required = $('#o-peso-obj').required = t === 'peso';
+    $('#o-ej').required = $('#o-rm').required = t === 'fuerza';
+    $('#o-km').required = t === 'volumen';
+  }
   $('#o-tipo').addEventListener('change', tipoObjetivo);
   $('#obj-nuevo').addEventListener('click', () => abrirObjetivo(null));
   $('#o-cancelar').addEventListener('click', () => { $('#f-obj').hidden = true; });
   $('#f-obj').addEventListener('submit', async (e) => {
     e.preventDefault();
     const tipo = $('#o-tipo').value;
-    const meta = (+$('#o-h').value || 0) * 60 + (+$('#o-m').value || 0);
-    const o = {id: $('#o-id').value || 'o' + Date.now(), tipo, objetivo: $('#o-nombre').value.trim(), dia: $('#o-dia').value, meta_min: meta || null};
+    const prev = (ST.perfil.objetivos || []).find((y) => y.id === $('#o-id').value);
+    const o = {id: $('#o-id').value || 'o' + Date.now(), tipo, objetivo: $('#o-nombre').value.trim() || EJEMPLO[tipo], dia: $('#o-dia').value || null,
+      creado: (prev && prev.creado) || iso(hoy())};
+    if (COMP.includes(tipo)) { const m = (+$('#o-h').value || 0) * 60 + (+$('#o-m').value || 0); o.meta_min = m || null; }
     if (tipo === 'carrera') o.distancia_km = +$('#o-dist').value;
     if (tipo === 'triatlon') o.distancia = $('#o-tri').value;
+    if (tipo === 'peso') {
+      o.peso_inicial = num('#o-peso-ini'); o.peso_objetivo = num('#o-peso-obj');
+      // el peso actual también se apunta en el registro si no hay nada de hoy
+      const dia = iso(hoy());
+      if (o.peso_inicial && !(ST.perfil.pesos || []).some((p) => p.dia === dia)) ST.perfil.pesos = (ST.perfil.pesos || []).concat({dia, kg: o.peso_inicial});
+    }
+    if (tipo === 'fuerza') { o.ejercicio = $('#o-ej').value.trim(); o.rm_objetivo = num('#o-rm'); }
+    if (tipo === 'forma') { o.dias_semana = +$('#o-dias').value; o.forma_objetivo = num('#o-forma'); }
+    if (tipo === 'volumen') { o.deporte = $('#o-dep').value; o.km_objetivo = num('#o-km'); o.desde = $('#o-desde').value || iso(hoy()); }
+    if (tipo === 'otro') { o.enfoque = $('#o-enfoque').value; o.nota = $('#o-nota').value.trim(); }
     ST.perfil.objetivos = (ST.perfil.objetivos || []).filter((y) => y.id !== o.id).concat(o);
     await guardar('perfil');
     $('#f-obj').hidden = true;
-    recalcular(); toast('Objetivo guardado. El plan se ha recalculado.');
+    recalcular(); toast('Objetivo guardado. El plan se adaptará a él la próxima vez que planifiques.');
   });
 
   // importación de Strava (inicio y perfil)

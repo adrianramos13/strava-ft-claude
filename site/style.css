@@ -208,3 +208,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .day:disabled { opacity: .3; cursor: default; }
 /* en las gráficas, el arrastre horizontal recorre los datos y el vertical sigue desplazando la página */
 .chart, .mcell svg { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+/* objetivos */
+.is-muted { color: var(--muted); }
+.goal-list { display: flex; flex-direction: column; gap: 0; }
+.goal-list .goal.mini { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.goal-list .goal.mini:last-child { border-bottom: 0; padding-bottom: 0; }
+.goal-list .goal.mini:first-child { padding-top: 0; }
+.goal.past { opacity: .55; }
+.goal.mini .goal-nums .big { font-size: 1.1rem; }
+.progress { height: 6px; border-radius: 999px; background: var(--grid); overflow: hidden; }
+.progress span { display: block; height: 100%; border-radius: 999px; background: currentColor; }
+.peso-form { display: flex; gap: 8px; }
+.peso-form input { flex: 1; min-width: 0; font-size: 1rem; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.phases .what em { font-style: normal; color: var(--accent); font-size: .8rem; }

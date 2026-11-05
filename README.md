@@ -11,7 +11,8 @@ de entrenos cada semana según tus objetivos y los días que tengas.
 ## Cómo se usa
 1. **Perfil → Subir export de Strava.** En strava.com: *Ajustes → Mi cuenta → Descargar o eliminar tu
    cuenta → Solicitar tu archivo*. Te llega un email con el zip; súbelo tal cual.
-2. **Perfil → Objetivos.** Añade tus carreras (a pie, HYROX o triatlón) con fecha y tiempo meta.
+2. **Perfil → Objetivos.** Personales (estar en forma, peso, fuerza en un ejercicio, km acumulados u otro)
+   o competiciones (carrera a pie, HYROX o triatlón). El plan de cada semana combina todos los que tengas.
 3. **Botón +** cada vez que entrenes: a mano (duración, distancia, pulso, esfuerzo) o desde un archivo
    GPX/TCX. Para la fuerza puedes pegar el texto que comparte Hevy y se leen las series.
    - **Android:** con la app instalada, desde la app del reloj (Suunto, Mi Fitness…) usa

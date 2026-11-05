@@ -73,7 +73,7 @@
       return o;
     }).filter((a) => a.d <= hoy).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
     if (!acts.length) {
-      const objetivos = (perfil.objetivos || []).map((o) => estimar(o, [], hoy));
+      const objetivos = (perfil.objetivos || []).map((o) => estimarObjetivo(o, {acts: [], hoy, perfil, sesiones: {}, ctl: 0}));
       return {vacio: true, estado: null, objetivos, kmSemana: planKm([], objetivos, hoy), fases: planFases(objetivos, hoy), ritmo10k: null, acts: [], recientes: []};
     }
 
@@ -150,7 +150,7 @@
     const ref10 = refs.length ? refs.reduce((b, a) => (riegel(a.min, a.km, 10) < riegel(b.min, b.km, 10) ? a : b)) : null;
     const ritmo10k = ref10 ? riegel(ref10.min, ref10.km, 10) / 10 : null;
 
-    const objetivos = (perfil.objetivos || []).map((o) => estimar(o, acts, hoy));
+    const objetivos = (perfil.objetivos || []).map((o) => estimarObjetivo(o, {acts, hoy, perfil, sesiones, ctl}));
     const kmSemana = planKm(acts, objetivos, hoy);
     const fases = planFases(objetivos, hoy);
 
@@ -165,6 +165,8 @@
       estado, pmc, horasSemana, deportes90: resumen(90), deportes7: resumen(7), carreras, mejores, fuerza, recientes,
       objetivos, kmSemana, fases, ritmo10k, acts,
       largo8: Math.max(0, ...runs.filter((a) => a.d > addDays(hoy, -56)).map((a) => a.km)),
+      ejercicios: Object.keys(sesiones).sort(),
+      cardioPref: (resumen(90).find((r) => ['run', 'bike', 'swim', 'walk'].includes(r.sport)) || {sport: 'run'}).sport,
     };
   }
 
@@ -227,6 +229,114 @@
     return o;
   }
 
+  // ---------------------------------------------- objetivos no competitivos
+  const COMPETICION = ['carrera', 'hyrox', 'triatlon'];
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const kg = (x) => `${dec(x, 1).replace(',0', '')} kg`;
+  // pendiente (unidades por día) de una regresión lineal sobre [{d, v}]
+  function tendencia(pts) {
+    if (pts.length < 2) return null;
+    const xs = pts.map((p) => p.d / DIA), ys = pts.map((p) => p.v);
+    const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+    const den = xs.reduce((s, x) => s + (x - mx) ** 2, 0);
+    return den ? xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / den : null;
+  }
+  const semanasHasta = (o, hoy) => (o.dia ? Math.max(0, (parse(o.dia) - hoy) / DIA / 7) : null);
+  const estadoPorRitmo = (necesario, real) => {
+    if (necesario <= 0) return 'en camino';
+    if (real == null) return 'en marcha';
+    const r = real / necesario;
+    return r >= 0.95 ? 'en camino' : r >= 0.7 ? 'alcanzable' : 'exigente';
+  };
+
+  function estimarObjetivo(o0, ctx) {
+    const {acts, hoy, perfil, sesiones, ctl} = ctx;
+    if (COMPETICION.includes(o0.tipo)) {
+      const o = estimar(o0, acts, hoy);
+      o.competicion = true;
+      const diff = o.diferencia_min == null ? '—' : `${o.diferencia_min > 0 ? '+' : '−'}${dec(Math.abs(o.diferencia_min))} min`;
+      o.nums = [['Meta', o.meta], ['Nivel actual', o.estimacion], ['Diferencia', diff]];
+      o.progreso = o.estimacion_min && o.meta_min ? clamp01(o.meta_min / o.estimacion_min) : null;
+      return o;
+    }
+    const o = {...o0, notas: [], competicion: false};
+    o.fecha_txt = o.dia ? (o.fecha_txt || fechaTxt(parse(o.dia))) : 'Sin fecha límite';
+    const sem = semanasHasta(o, hoy);
+
+    if (o.tipo === 'peso') {
+      const pesos = (perfil.pesos || []).map((p) => ({d: parse(p.dia), v: +p.kg})).sort((a, b) => a.d - b.d);
+      const ini = +o.peso_inicial || (pesos[0] && pesos[0].v);
+      const act = pesos.length ? pesos[pesos.length - 1].v : ini;
+      const meta = +o.peso_objetivo;
+      const falta = act - meta;  // positivo si hay que bajar
+      o.nums = [['Meta', kg(meta)], ['Ahora', kg(act)], [falta >= 0 ? 'Te faltan' : 'Te sobran', kg(Math.abs(falta))]];
+      o.progreso = ini !== meta ? clamp01((ini - act) / (ini - meta)) : 1;
+      const recientes = pesos.filter((p) => p.d >= addDays(hoy, -35));
+      const pend = tendencia(recientes);  // kg/día
+      const necesario = sem ? Math.abs(falta) / sem : null;  // kg/semana
+      const realSem = pend == null ? null : -Math.sign(falta) * pend * 7;  // kg/semana en la buena dirección
+      o.estado = Math.abs(falta) < 0.3 ? 'conseguido' : necesario == null ? (realSem > 0 ? 'en camino' : 'en marcha') : estadoPorRitmo(necesario, realSem);
+      o.base = pend == null
+        ? 'Registra tu peso 1–2 veces por semana (mismo día y hora, en ayunas) para ver tu ritmo.'
+        : `Tu tendencia de las últimas semanas: ${pend * 7 <= 0 ? '−' : '+'}${dec(Math.abs(pend * 7), 2)} kg/semana.`;
+      if (necesario != null && Math.abs(falta) >= 0.3) {
+        o.notas.push(`Necesitas ${dec(necesario, 2)} kg/semana para llegar a tiempo.`);
+        if (falta > 0 && necesario > act * 0.01) o.notas.push('Es un ritmo muy agresivo (más del 1 % de tu peso por semana): plantéate alargar la fecha para no perder músculo.');
+      }
+      if (falta > 0) o.notas.push('El plan prioriza fuerza 2–3 días para conservar músculo y cardio suave para gastar más. Lo que más pesa es la alimentación: un déficit moderado (unas 300–500 kcal al día) suele bastar. Si tienes dudas, consulta con un nutricionista.');
+      o.foco = falta > 0 ? 'peso' : 'fuerza';
+    } else if (o.tipo === 'fuerza') {
+      const buscar = (o.ejercicio || '').toLowerCase();
+      const nombre = Object.keys(sesiones).find((e) => e.toLowerCase() === buscar) || Object.keys(sesiones).find((e) => e.toLowerCase().includes(buscar));
+      const pts = nombre ? Object.entries(sesiones[nombre]).map(([k, v]) => ({d: parse(k), v})).sort((a, b) => a.d - b.d) : [];
+      const ult = pts.filter((p) => p.d >= addDays(hoy, -45));
+      const act = ult.length ? Math.max(...ult.map((p) => p.v)) : (pts.length ? pts[pts.length - 1].v : null);
+      const meta = +o.rm_objetivo;
+      o.ejercicio_dato = nombre || o.ejercicio;
+      o.rm_actual = act;
+      o.nums = [['Meta 1RM', kg(meta)], ['Ahora', act ? kg(act) : '—'], ['Te faltan', act ? kg(Math.max(0, meta - act)) : '—']];
+      o.progreso = act ? clamp01(act / meta) : null;
+      const pend = tendencia(pts.filter((p) => p.d >= addDays(hoy, -120)));
+      const necesario = sem && act ? Math.max(0, meta - act) / sem : null;
+      o.estado = act && act >= meta ? 'conseguido' : !act ? 'sin datos' : necesario == null ? 'en marcha' : estadoPorRitmo(necesario, pend == null ? null : pend * 7);
+      o.base = !nombre ? `Aún no hay series de «${o.ejercicio}». Llegan desde Hevy (vía Strava) o pegándolas al añadir un entreno de fuerza.`
+        : `Mejor serie de los últimos 45 días convertida a 1RM (fórmula de Epley)${pend != null ? `; tendencia ${pend * 30 >= 0 ? '+' : '−'}${dec(Math.abs(pend * 30))} kg/mes` : ''}.`;
+      if (necesario != null && act < meta) o.notas.push(`Necesitas ganar unos ${dec(necesario * 4.3)} kg de 1RM al mes.`);
+      o.notas.push(`El plan incluye ${o.ejercicio} 2 veces por semana: una pesada (series de 3–5) y otra de volumen (series de 6–8).`);
+      o.foco = 'fuerza';
+    } else if (o.tipo === 'forma') {
+      const objDias = +o.dias_semana || 4;
+      const dias = new Set(acts.filter((a) => a.d > addDays(hoy, -28)).map((a) => iso(a.d))).size / 4;
+      const fObj = +o.forma_objetivo || null;
+      o.nums = [['Días/semana', `${objDias}`], ['Ahora', dec(dias)], fObj ? ['Forma', `${Math.round(ctl)} / ${fObj}`] : ['Forma', `${Math.round(ctl)}`]];
+      const pDias = clamp01(dias / objDias), pForma = fObj ? clamp01(ctl / fObj) : null;
+      o.progreso = pForma == null ? pDias : (pDias + pForma) / 2;
+      o.estado = o.progreso >= 0.95 ? 'en camino' : o.progreso >= 0.7 ? 'alcanzable' : 'exigente';
+      o.base = `Media de días con entreno en las últimas 4 semanas: ${dec(dias)} de ${objDias}.${fObj ? ` Forma actual ${Math.round(ctl)}, objetivo ${fObj}.` : ''}`;
+      if (fObj && ctl < fObj && sem) o.notas.push(`Para llegar a ${fObj} de forma necesitas subir unos ${dec((fObj - ctl) / sem)} puntos por semana; más de 3–5 por semana es arriesgado.`);
+      o.foco = 'forma';
+    } else if (o.tipo === 'volumen') {
+      const sp = o.deporte || 'run';
+      const desde = parse(o.desde || o.creado || iso(addDays(hoy, -1)));
+      const hecho = acts.filter((a) => a.sport === sp && a.d >= desde).reduce((s, a) => s + a.km, 0);
+      const meta = +o.km_objetivo;
+      const ult4 = acts.filter((a) => a.sport === sp && a.d > addDays(hoy, -28)).reduce((s, a) => s + a.km, 0) / 4;
+      o.nums = [['Meta', `${dec(meta, 0)} km`], ['Llevas', `${dec(hecho, 0)} km`], ['Te faltan', `${dec(Math.max(0, meta - hecho), 0)} km`]];
+      o.progreso = clamp01(hecho / meta);
+      const necesario = sem ? Math.max(0, meta - hecho) / sem : null;
+      o.km_semana_necesarios = necesario;
+      o.estado = hecho >= meta ? 'conseguido' : necesario == null ? 'en marcha' : estadoPorRitmo(necesario, ult4);
+      o.base = `Desde el ${fechaTxt(desde)} en ${ETIQUETA[sp].toLowerCase()}. Últimas 4 semanas: ${dec(ult4)} km/semana.`;
+      if (necesario != null && hecho < meta) o.notas.push(`Necesitas ${dec(necesario)} km por semana hasta la fecha.`);
+      o.foco = sp === 'run' ? 'base' : 'forma';
+    } else {
+      o.nums = null; o.progreso = null; o.estado = 'en marcha';
+      o.base = o.nota || 'Objetivo personal.';
+      o.foco = o.enfoque || 'forma';
+    }
+    return o;
+  }
+
   function planKm(acts, objetivos, hoy) {
     const real = new Map();
     acts.filter((a) => a.sport === 'run').forEach((a) => { const k = iso(lunes(a.d)); real.set(k, (real.get(k) || 0) + a.km); });
@@ -237,7 +347,7 @@
     const pico = dist <= 10 ? 35 : dist <= 21.1 ? 45 : 60;
     let ult4 = 0; for (let i = 1; i <= 4; i++) ult4 += real.get(iso(addDays(l0, -7 * i))) || 0;
     const inicio = Math.max(10, Math.round(ult4 / 4));
-    const otros = new Set(objetivos.filter((o) => o.tipo !== 'carrera' && parse(o.dia) < fin).map((o) => iso(lunes(parse(o.dia)))));
+    const otros = new Set(objetivos.filter((o) => (o.tipo === 'hyrox' || o.tipo === 'triatlon') && parse(o.dia) < fin).map((o) => iso(lunes(parse(o.dia)))));
     const semanasPlan = Math.max(1, Math.round((fin - l0) / DIA / 7));
     const construir = Math.max(1, semanasPlan - 2);
     const out = [];
@@ -265,7 +375,14 @@
     const fases = [];
     let ini = addDays(hoy, (8 - hoy.getUTCDay()) % 7);
     if (ini < hoy) ini = hoy;
-    const fut = objetivos.filter((o) => parse(o.dia) > hoy).sort((a, b) => (a.dia < b.dia ? -1 : 1));
+    const fut = objetivos.filter((o) => o.competicion && parse(o.dia) > hoy).sort((a, b) => (a.dia < b.dia ? -1 : 1));
+    const otros = objetivos.filter((o) => !o.competicion && (!o.dia || parse(o.dia) > hoy) && o.estado !== 'conseguido');
+    const FOCO = {
+      peso: ['Fuerza y cardio para perder peso', 'Fuerza 2–3 días para conservar músculo, cardio suave en Z2 que vaya alargándose y una sesión corta de intervalos. Camina a diario.'],
+      fuerza: ['Bloque de fuerza', 'Fuerza 3 días con progresión de cargas (sube un poco cada semana mientras mantengas la técnica), cardio suave para la recuperación.'],
+      forma: ['Ponerte en forma', 'Constancia por encima de todo: cardio suave, fuerza 2 días y una sesión algo más intensa. Sube la carga poco a poco.'],
+      base: ['Base aeróbica', TEXTO.base[1]],
+    };
     fut.forEach((o, n) => {
       const dia = parse(o.dia);
       const esp = addDays(dia, -7 * (n === 0 ? 10 : 5));
@@ -275,10 +392,17 @@
       fases.push({tipo: 'afinar', objetivo: o.id, desde: iso(afinar > ini ? afinar : ini), hasta: iso(dia), titulo: TEXTO.afinar[0].replace('{n}', o.objetivo), texto: TEXTO.afinar[1]});
       ini = addDays(dia, 2);
     });
-    if (!fut.length) fases.push({tipo: 'base', desde: iso(hoy), hasta: iso(addDays(hoy, 84)), titulo: 'Mantener y mejorar la base', texto: 'Sin objetivos a la vista: constancia, rodajes suaves, algo de intensidad y fuerza. Añade un objetivo en tu perfil para un plan a medida.'});
+    if (!fut.length) {
+      const p = otros.slice().sort((a, b) => ((a.dia || '9999') < (b.dia || '9999') ? -1 : 1))[0];
+      const fin = p && p.dia ? parse(p.dia) : addDays(hoy, 84);
+      if (p) { const [t, x] = FOCO[p.foco] || FOCO.forma; fases.push({tipo: p.foco || 'forma', objetivo: p.id, desde: iso(hoy), hasta: iso(fin), titulo: `${t}: ${p.objetivo}`, texto: x}); }
+      else fases.push({tipo: 'base', desde: iso(hoy), hasta: iso(fin), titulo: 'Mantener y mejorar la base', texto: 'Sin objetivos a la vista: constancia, rodajes suaves, algo de intensidad y fuerza. Añade un objetivo en tu perfil para un plan a medida.'});
+    }
+    // los objetivos no competitivos se trabajan a la vez que las fases
+    if (otros.length) fases.forEach((f) => { const p = otros.filter((o) => o.id !== f.objetivo).map((o) => o.objetivo); if (p.length) f.paralelo = `A la vez: ${p.join(', ')}.`; });
     fases.forEach((f) => { const a = parse(f.desde), b = parse(f.hasta); f.cuando = `${a.getUTCDate()} ${MES[a.getUTCMonth()]} – ${b.getUTCDate()} ${MES[b.getUTCMonth()]} ${b.getUTCFullYear()}`; });
     return fases;
   }
 
-  window.AN = {analizar, seriesHevy, deporte, ETIQUETA, ORDEN, MES, iso, parse, addDays, lunes, hoyUTC, fechaTxt, hm, ritmo, riegel, DIA};
+  window.AN = {analizar, seriesHevy, deporte, ETIQUETA, ORDEN, MES, iso, parse, addDays, lunes, hoyUTC, fechaTxt, hm, ritmo, riegel, DIA, COMPETICION};
 })();
