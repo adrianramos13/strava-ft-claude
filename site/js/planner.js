@@ -167,8 +167,37 @@
         meter(5, () => S.cardioZ2(false, 2));
       }
     }
-    const dias = [...disponibles].sort((a, b) => a - b);
-    // evita sesiones repetidas de más (máx. 3 de fuerza) al recortar a los días disponibles
+    const disp = [...disponibles].sort((a, b) => a - b);
+    // ¿cuántas sesiones conviene? Los días marcados son el máximo, no una obligación.
+    const BASE_FASE = {base: 4, carrera: 5, trail: 5, ocr: 4, hyrox: 5, triatlon: 6, duatlon: 5, ciclismo: 4, aguas: 4, peso: 5, fuerza: 4, forma: 4, afinar: 4};
+    let rec = BASE_FASE[fase.tipo] || 4;
+    const motivo = [];
+    // no saltar de golpe: como mucho 2 sesiones más que tu media de las últimas 4 semanas
+    const hoyIso = iso(new Date());
+    const ult = R && R.acts ? new Set(R.acts.filter((a) => a.fecha.slice(0, 10) > iso(addDays(parse(hoyIso), -28))).map((a) => a.fecha.slice(0, 10))).size / 4 : null;
+    if (ult != null && !opts.futuro && rec > Math.round(ult) + 2) { rec = Math.round(ult) + 2; motivo.push(`subes poco a poco desde tus ${String(Math.round(ult * 10) / 10).replace('.', ',')} días/semana actuales`); }
+    if (formaObj && +formaObj.dias_semana > rec) { rec = +formaObj.dias_semana; motivo.push(`tu objetivo «${formaObj.objetivo}» pide ${formaObj.dias_semana} días`); }
+    if (competicion) { rec = 3; motivo.push('es semana de competición (la prueba va aparte)'); }
+    if (recien) { rec = 3; motivo.push('toca recuperar tras la prueba'); }
+    if (plan && plan.descarga && !competicion && !recien) { rec -= 1; motivo.push('es semana de descarga'); }
+    if (!opts.futuro && R && R.estado && R.estado.frescura < -25) { rec -= 1; motivo.push('vienes muy cargado'); }
+    rec = Math.max(2, Math.min(7, rec));
+    const nSes = Math.min(disp.length, rec);
+    // si sobran días, se eligen los más repartidos (con el fin de semana para la sesión larga)
+    let dias = disp;
+    if (nSes < disp.length) {
+      const elegidos = [];
+      const finde = disp.filter((d) => d >= 5);
+      if (finde.length) elegidos.push(finde.reduce((a, b) => ((minutosDia[b] || 60) >= (minutosDia[a] || 60) ? b : a)));
+      while (elegidos.length < nSes) {
+        const gap = (d) => Math.min(...elegidos.map((e) => Math.min(Math.abs(e - d), 7 - Math.abs(e - d))), 7);
+        const cand = disp.filter((d) => !elegidos.includes(d)).sort((a, b) => gap(b) - gap(a) || (minutosDia[b] || 60) - (minutosDia[a] || 60) || a - b);
+        elegidos.push(cand[0]);
+      }
+      dias = elegidos.sort((a, b) => a - b);
+      notas.unshift(`Tienes ${disp.length} días disponibles y te propongo ${nSes} sesiones${motivo.length ? ` porque ${motivo.join(' y ')}` : ': es lo que mejor encaja con tu fase'}. Los demás días, descanso o un paseo.`);
+    }
+    // evita sesiones repetidas de más (máx. 3 de fuerza) al recortar a los días elegidos
     const sesiones = [];
     for (const f of prioridad) {
       if (sesiones.length >= dias.length) break;
@@ -179,7 +208,7 @@
     }
     while (sesiones.length < dias.length) sesiones.push(S.movilidad());
     if (dias.length <= 2 && !sesiones.some((s) => s.sport === 'strength') && dias.length) notas.push('Con tan pocos días, prioriza las sesiones de carrera; la fuerza puede ir en 20 min al final de una de ellas.');
-    if (formaObj && dias.length < (+formaObj.dias_semana || 0)) notas.push(`Tu objetivo «${formaObj.objetivo}» pide ${formaObj.dias_semana} días por semana y esta semana marcas ${dias.length}. Si puedes, añade aunque sean 30 min otro día.`);
+    if (formaObj && disp.length < (+formaObj.dias_semana || 0)) notas.push(`Tu objetivo «${formaObj.objetivo}» pide ${formaObj.dias_semana} días por semana y esta semana tienes ${disp.length}. Si puedes, añade aunque sean 30 min otro día.`);
     if (pesoObj) notas.push(`Para «${pesoObj.objetivo}»: además de los entrenos, intenta caminar 8.000–10.000 pasos al día y cuidar la alimentación.`);
     if (volObj && volObj.km_semana_necesarios) notas.push(`Para «${volObj.objetivo}» necesitas unos ${Math.round(volObj.km_semana_necesarios)} km esta semana.`);
 
@@ -222,7 +251,7 @@
     });
     out.sort((a, b) => (a.dia < b.dia ? -1 : 1));
     const kmTot = out.reduce((s, x) => s + (x.sport === 'run' && x.km ? x.km : 0), 0);
-    return {semana: semanaIso, fase: fase.titulo, faseTipo: fase.tipo, sesiones: out, kmCarrera: kmTot, notas, creado: new Date().toISOString(), disponibles: dias, minutosDia,
+    return {semana: semanaIso, fase: fase.titulo, faseTipo: fase.tipo, sesiones: out, kmCarrera: kmTot, notas, creado: new Date().toISOString(), disponibles: disp, minutosDia,
       descarga: !!(plan && plan.descarga) && !competicion && !recien, competicion: competicion ? competicion.objetivo : null, recuperacion: recien ? recien.objetivo : null,
       horas: Math.round(out.reduce((s, x) => s + (x.min || 0), 0) / 6) / 10};
   }

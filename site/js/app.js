@@ -387,7 +387,7 @@
       lab.append(s); mins.append(lab);
     });
     $('#plan-crear').disabled = !selDias.size;
-    $('#plan-crear').textContent = selDias.size ? `Proponer ${selDias.size} ${selDias.size === 1 ? 'entreno' : 'entrenos'}` : 'Elige al menos un día';
+    $('#plan-crear').textContent = selDias.size ? 'Proponer entrenos' : 'Elige al menos un día';
 
     const vista = $('#plan-vista'); vista.replaceChildren();
     const mostrar = (p, titulo) => {
