@@ -187,9 +187,9 @@
     const t = el('div', 'act-top'); t.append(el('b', null, a.nombre || a.deporte), el('span', 'act-carga', `${a.carga} pts`));
     const m = el('div', 'act-meta', [a.fecha, a.deporte, a.duracion, a.km ? `${nf(a.km, 1)} km` : null, a.fc ? `${nf(a.fc)} ppm` : null].filter(Boolean).join(' · '));
     b.append(t, m);
-    if (a.origen === 'manual') b.append(el('span', 'tag', 'manual'));
+    if (a.origen === 'manual' || a.origen === 'archivo') b.append(el('span', 'tag', a.origen === 'archivo' ? 'subida' : 'manual'));
     li.append(b);
-    if (borrar && a.origen === 'manual') {
+    if (borrar && (a.origen === 'manual' || a.origen === 'archivo')) {
       const x = el('button', 'icon-btn', '×'); x.setAttribute('aria-label', 'Borrar entreno');
       x.onclick = async () => { if (await confirmar('Borrar entreno', `¿Borrar «${a.nombre}» del ${a.fecha}?`, 'Borrar')) { ST.acts = ST.acts.filter((y) => y.id !== a.id); await guardar('acts'); recalcular(); toast('Entreno borrado'); } };
       li.append(x);
@@ -294,11 +294,33 @@
   }
   $('#f-sport').addEventListener('change', actualizarCamposDeporte);
   $('#f-rpe').addEventListener('input', () => { $('#f-rpe-v').textContent = $('#f-rpe').value; });
+  let archivoExtra = null;  // datos del archivo que el formulario no muestra (FC máx., desnivel)
+  // repetida si empieza a la misma hora (±10 min) o si es el mismo día, deporte y duración parecida
+  const mismoArchivo = (a, b) => Math.abs(new Date(a.fecha) - new Date(b.fecha)) < 10 * 60000 || mismoEntreno(a, b);
   $('#f-archivo').addEventListener('change', async (e) => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
+    const files = [...e.target.files]; e.target.value = '';
+    if (!files.length) return;
+    if (files.length > 1) {  // varios: se guardan directamente
+      let ok = 0, rep = 0; const fallos = [];
+      for (const f of files) {
+        try {
+          const t = await window.IMP.leerActividad(f);
+          const a = {id: 'f' + Date.now() + '-' + ok, origen: 'archivo', tipo: '', esfuerzo: null, rpe: null, descripcion: null, ...t,
+            sport: t.sport || 'other', nombre: t.nombre || NOMBRE_DEF[t.sport || 'other']};
+          if (ST.acts.some((b) => mismoArchivo(a, b))) { rep++; continue; }
+          ST.acts.push(a); ok++;
+        } catch (err) { fallos.push(f.name); }
+      }
+      await guardar('acts'); recalcular();
+      const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+      toast(`${ok ? `Guardada${ok === 1 ? '' : 's'} ${pl(ok, 'actividad', 'actividades')}` : 'Ninguna actividad nueva'}${rep ? `; ${pl(rep, 'ya estaba', 'ya estaban')}` : ''}${fallos.length ? `; no he podido leer: ${fallos.join(', ')}` : ''}.`);
+      if (ok) ir('inicio');
+      return;
+    }
+    const f = files[0];
     try {
-      const t = await window.IMP.leerTrack(f);
+      const t = await window.IMP.leerActividad(f);
+      archivoExtra = {fc_max: t.fc_max, desnivel: t.desnivel || 0, seg_total: t.seg_total, metros: t.metros, origen: 'archivo'};
       if (t.sport) $('#f-sport').value = t.sport;
       $('#f-fecha').value = t.fecha.slice(0, 10); $('#f-hora').value = t.fecha.slice(11, 16);
       const min = Math.round(t.seg_mov / 60); $('#f-h').value = Math.floor(min / 60); $('#f-m').value = min % 60;
@@ -324,8 +346,13 @@
       fc: +$('#f-fc').value || null, fc_max: null, esfuerzo: null, rpe: +$('#f-rpe').value, desnivel: 0,
       descripcion: [sp === 'strength' ? hevy : '', notas].filter(Boolean).join('\n\n') || null,
     };
+    if (archivoExtra) {
+      a.origen = 'archivo'; a.fc_max = archivoExtra.fc_max; a.desnivel = archivoExtra.desnivel;
+      a.seg_total = Math.max(seg, archivoExtra.seg_total || 0);
+    }
     ST.acts.push(a);
     await guardar('acts');
+    archivoExtra = null;
     $('#f-entreno').reset(); $('#f-rpe-v').textContent = '6'; $('#f-fecha').value = '';
     recalcular();
     toast('Entreno guardado. Métricas actualizadas.');
@@ -460,7 +487,8 @@
       ST.ajustes.ultimaImportacion = {fecha: new Date().toISOString(), n: acts.length};
       await guardar('acts', 'perfil', 'ajustes');
       recalcular();
-      toast(`Importadas ${nf(acts.length)} actividades${manual.length - quedan.length ? `; ${manual.length - quedan.length} manuales sustituidas por su versión de Strava` : ''}.`);
+      const sust = manual.length - quedan.length;
+      toast(`Importadas ${nf(acts.length)} actividades${sust ? `; ${sust === 1 ? '1 añadida a mano se ha sustituido' : `${sust} añadidas a mano se han sustituido`} por su versión de Strava` : ''}.`);
     } catch (err) { console.error(err); toast('No he podido importar: ' + err.message); }
   }));
 

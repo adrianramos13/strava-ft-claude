@@ -101,8 +101,13 @@
   <section class="view" id="v-anadir" data-title="Añadir entreno" hidden>
     <div class="card">
       <h2>Nuevo entreno</h2>
-      <label class="btn file"><input type="file" accept=".gpx,.tcx,application/gpx+xml" id="f-archivo" hidden>Rellenar desde archivo GPX o TCX</label>
-      <p class="note">Desde la app de Suunto o de tu pulsera puedes exportar el entreno como GPX o TCX. Si no, rellénalo a mano.</p>
+      <label class="btn primary file"><input type="file" accept=".fit,.gpx,.tcx,.gz,application/gpx+xml,application/octet-stream" id="f-archivo" multiple hidden>Subir actividades de Strava o del reloj</label>
+      <details class="how"><summary>¿De dónde saco el archivo?</summary>
+        <p><b>Desde Strava:</b> abre la actividad en strava.com (en el móvil, en el navegador con «Ver versión para ordenador»), menú <b>⋯</b> → <b>Exportar original</b> (.fit) o <b>Exportar GPX</b>.</p>
+        <p><b>Desde la app de Suunto o de tu pulsera:</b> en el entreno, opción de compartir o exportar como GPX/FIT.</p>
+        <p>Si subes un archivo, se rellena el formulario para que lo revises. Si subes varios, se guardan directamente.</p>
+      </details>
+      <p class="note">O rellénalo a mano:</p>
       <form id="f-entreno" class="form">
         <label>Deporte
           <select id="f-sport" required>

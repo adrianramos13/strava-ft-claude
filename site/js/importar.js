@@ -35,8 +35,9 @@
     let hh = +h; if (ap) { if (/pm/i.test(ap) && hh < 12) hh += 12; if (/am/i.test(ap) && hh === 12) hh = 0; }
     const mm = MESES[mes.toLowerCase().replace('.', '').slice(0, 3)];
     if (!mm) return null;
-    const p = (n) => String(n).padStart(2, '0');
-    return `${y}-${p(mm)}-${p(+dia)}T${p(hh)}:${mi}:${se}`;
+    // el export de Strava da la hora en UTC: se pasa a la hora local del móvil
+    const utc = new Date(Date.UTC(+y, mm - 1, +dia, hh, +mi, +se));
+    return new Date(utc.getTime() - utc.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
   }
   const num = (x) => { if (x == null || x === '') return null; const v = parseFloat(String(x).replace(',', '.')); return Number.isFinite(v) ? v : null; };
 
@@ -71,9 +72,93 @@
     return {acts, perfil};
   }
 
+  // ---------------------------------------------------------------- FIT
+  // Lector mínimo del formato FIT (Garmin/Suunto/Coros): mensajes "session" (18) y "record" (20).
+  const FIT_EPOCH = 631065600;  // 1989-12-31T00:00:00Z en segundos unix
+  const FIT_SPORT = {1: 'run', 2: 'bike', 5: 'swim', 11: 'walk', 17: 'walk', 4: 'other', 10: 'strength'};
+  function leerFit(buf) {
+    const dv = new DataView(buf);
+    const hdr = dv.getUint8(0);
+    if (buf.byteLength < 14 || String.fromCharCode(dv.getUint8(8), dv.getUint8(9), dv.getUint8(10), dv.getUint8(11)) !== '.FIT') throw new Error('no es un archivo FIT');
+    const fin = hdr + dv.getUint32(4, true);
+    const defs = {};
+    let p = hdr, ultimoTs = 0;
+    const sesiones = [], records = [];
+    const leerUint = (off, size, le) => (size === 1 ? dv.getUint8(off) : size === 2 ? dv.getUint16(off, le) : size === 4 ? dv.getUint32(off, le) : null);
+    const INVALIDO = {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF};
+    while (p < fin && p < buf.byteLength) {
+      const h = dv.getUint8(p++);
+      let local, comprimido = false;
+      if (h & 0x80) { local = (h >> 5) & 0x3; comprimido = true; }
+      else local = h & 0x0F;
+      if (!comprimido && (h & 0x40)) {  // definición
+        const le = dv.getUint8(p + 1) === 0;
+        const global = dv.getUint16(p + 2, le);
+        const n = dv.getUint8(p + 4);
+        p += 5;
+        const campos = [];
+        for (let i = 0; i < n; i++, p += 3) campos.push([dv.getUint8(p), dv.getUint8(p + 1)]);
+        let extra = 0;
+        if (h & 0x20) { const nd = dv.getUint8(p++); for (let i = 0; i < nd; i++, p += 3) extra += dv.getUint8(p + 1); }
+        defs[local] = {global, le, campos, extra};
+        continue;
+      }
+      const d = defs[local];
+      if (!d) throw new Error('archivo FIT dañado');
+      const v = {};
+      d.campos.forEach(([num, size]) => {
+        const x = leerUint(p, size, d.le);
+        if (x != null && x !== INVALIDO[size]) v[num] = x;
+        p += size;
+      });
+      p += d.extra;
+      if (comprimido) v[253] = ultimoTs + ((h & 0x1F) - (ultimoTs & 0x1F) + 32) % 32;
+      if (v[253] != null) ultimoTs = v[253];
+      if (d.global === 18) sesiones.push(v);
+      else if (d.global === 20) records.push(v);
+    }
+    const s = sesiones[0];
+    const hrs = records.map((r) => r[3]).filter((x) => x > 30);
+    const t0 = s && s[2] != null ? s[2] : (records[0] && records[0][253]);
+    if (t0 == null) throw new Error('el archivo FIT no tiene hora de inicio');
+    const inicio = new Date((t0 + FIT_EPOCH) * 1000);
+    const tsUlt = records.length ? records[records.length - 1][253] : null;
+    const total = s && s[7] != null ? s[7] / 1000 : (tsUlt ? tsUlt - t0 : 0);
+    const mov = s && s[8] != null ? s[8] / 1000 : total;
+    const dist = s && s[9] != null ? s[9] / 100 : (records.length && records[records.length - 1][5] != null ? records[records.length - 1][5] / 100 : 0);
+    const local = new Date(inicio.getTime() - inicio.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+    return {
+      fecha: local, nombre: '', sport: s && FIT_SPORT[s[5]] ? FIT_SPORT[s[5]] : null, seg_total: total, seg_mov: mov || total, metros: dist,
+      fc: s && s[16] != null ? s[16] : (hrs.length ? hrs.reduce((a, b) => a + b, 0) / hrs.length : null),
+      fc_max: s && s[17] != null ? s[17] : (hrs.length ? Math.max(...hrs) : null), desnivel: s && s[22] != null ? s[22] : 0,
+    };
+  }
+
+  async function bytes(file) {
+    let buf = await file.arrayBuffer();
+    const u = new Uint8Array(buf);
+    if (u[0] === 0x1f && u[1] === 0x8b) {  // .gz
+      if (!('DecompressionStream' in window)) throw new Error('este navegador no descomprime .gz; descomprímelo antes');
+      buf = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    }
+    return buf;
+  }
+
+  // Cualquier archivo de actividad: FIT, GPX o TCX (también comprimidos en .gz)
+  async function leerActividad(file) {
+    const buf = await bytes(file);
+    const dv = new DataView(buf);
+    const esFit = buf.byteLength > 12 && String.fromCharCode(dv.getUint8(8), dv.getUint8(9), dv.getUint8(10), dv.getUint8(11)) === '.FIT';
+    const r = esFit ? leerFit(buf) : await leerTrack(new TextDecoder().decode(buf));
+    if (!r.nombre) r.nombre = file.name.replace(/\.(fit|gpx|tcx)(\.gz)?$/i, '').replace(/[_-]+/g, ' ').trim();
+    if (/^\d+$/.test(r.nombre)) r.nombre = '';
+    return r;
+  }
+
   // GPX/TCX de un entreno suelto (Suunto, Xiaomi, etc.)
-  async function leerTrack(file) {
-    const xml = new DOMParser().parseFromString(await file.text(), 'application/xml');
+  async function leerTrack(texto) {
+    const xml = new DOMParser().parseFromString(texto, 'application/xml');
+    if (xml.getElementsByTagName('parsererror').length) throw new Error('el archivo no es GPX, TCX ni FIT');
     const tag = (el, n) => [...el.getElementsByTagNameNS('*', n)];
     const pts = [];
     const tcx = tag(xml, 'Trackpoint');
@@ -102,7 +187,7 @@
       }
       const dt = (b.t - a.t) / 1000;
       metros += d;
-      if (dt > 0 && dt < 30 && d / dt > 0.5) mov += dt;  // cuenta como movimiento
+      if (dt > 0 && dt <= 120 && d / dt > 0.4) mov += dt;  // cuenta como movimiento (también con puntos espaciados)
     }
     const total = (conT[conT.length - 1].t - conT[0].t) / 1000;
     const hrs = pts.map((p) => p.hr).filter((h) => h > 30);
@@ -114,5 +199,5 @@
       fc: hrs.length ? hrs.reduce((s, h) => s + h, 0) / hrs.length : null, fc_max: hrs.length ? Math.max(...hrs) : null};
   }
 
-  window.IMP = {leerStrava, leerTrack, actividadesDesdeCsv, csv, fechaExport};
+  window.IMP = {leerStrava, leerActividad, leerTrack, leerFit, actividadesDesdeCsv, csv, fechaExport};
 })();
