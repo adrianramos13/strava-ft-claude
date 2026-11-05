@@ -463,7 +463,8 @@
     const ul = $('#obj-lista'); ul.replaceChildren();
     const objs = (ST.perfil.objetivos || []).slice().sort((a, b) => ((a.dia || '9') < (b.dia || '9') ? -1 : 1));
     if (!objs.length) ul.append(el('li', 'note', 'Sin objetivos. Añade lo que quieras conseguir (estar en forma, bajar peso, una carrera…) para que el plan se adapte.'));
-    const TIPO = {forma: 'Estar en forma', peso: 'Peso', fuerza: 'Fuerza', volumen: 'Volumen', otro: 'Otro', carrera: 'Carrera', hyrox: 'HYROX', triatlon: 'Triatlón'};
+    const TIPO = {forma: 'Estar en forma', peso: 'Peso', fuerza: 'Fuerza', volumen: 'Volumen', otro: 'Otro', carrera: 'Carrera', hyrox: 'HYROX', triatlon: 'Triatlón',
+      trail: 'Trail', ocr: 'Obstáculos', duatlon: 'Duatlón', ciclismo: 'Ciclismo', aguas: 'Aguas abiertas'};
     objs.forEach((o) => {
       const li = el('li', 'obj');
       const b = el('div', 'act-body');
@@ -489,13 +490,18 @@
 
   const COMP = window.AN.COMPETICION;
   const EJEMPLO = {forma: 'Estar en forma', peso: 'Bajar 10 kg', fuerza: 'Sentadilla a 100 kg', volumen: 'Correr 1.000 km este año', otro: 'Subir el Teide andando',
-    carrera: 'Media maratón de Madrid', hyrox: 'HYROX Madrid', triatlon: 'Triatlón de Valencia'};
+    carrera: 'Media maratón de Madrid', hyrox: 'HYROX Madrid', triatlon: 'Triatlón de Valencia', trail: 'Trail de Guadarrama',
+    ocr: 'Spartan Race Madrid', duatlon: 'Duatlón de Alcobendas', ciclismo: 'Quebrantahuesos', aguas: 'Travesía a nado de 3 km'};
+  const DIST_CARRERA = ['5', '10', '15', '21.0975', '30', '42.195'];
   const num = (id) => { const v = parseFloat(String($(id).value).replace(',', '.')); return Number.isFinite(v) ? v : null; };
   function abrirObjetivo(o) {
     const f = $('#f-obj'); f.hidden = false;
     const v = (id, x) => { $(id).value = x == null ? '' : x; };
     v('#o-id', o && o.id); v('#o-tipo', o ? o.tipo : 'forma'); v('#o-nombre', o && o.objetivo);
-    v('#o-dist', o && o.distancia_km ? String(o.distancia_km) : '21.0975'); v('#o-tri', (o && o.distancia) || 'olimpico');
+    const dk = o && o.tipo === 'carrera' && o.distancia_km ? String(o.distancia_km) : '21.0975';
+    v('#o-dist', DIST_CARRERA.includes(dk) ? dk : 'otra'); v('#o-dist-otra', DIST_CARRERA.includes(dk) ? null : String(dk).replace('.', ','));
+    v('#o-tri', (o && o.tipo === 'triatlon' && o.distancia) || 'olimpico'); v('#o-dua', (o && o.tipo === 'duatlon' && o.distancia) || 'sprint');
+    v('#o-km-comp', o && ['trail', 'ocr', 'ciclismo', 'aguas'].includes(o.tipo) ? String(o.distancia_km).replace('.', ',') : null); v('#o-desnivel', o && o.desnivel);
     v('#o-dia', o && o.dia);
     v('#o-h', o && o.meta_min ? Math.floor(o.meta_min / 60) : null); v('#o-m', o && o.meta_min ? o.meta_min % 60 : null);
     const pesos = ST.perfil.pesos || [];
@@ -518,8 +524,12 @@
     $('#o-peso-ini').required = $('#o-peso-obj').required = t === 'peso';
     $('#o-ej').required = $('#o-rm').required = t === 'fuerza';
     $('#o-km').required = t === 'volumen';
+    $('#o-km-comp').required = ['trail', 'ocr', 'ciclismo', 'aguas'].includes(t);
+    $('#o-dist-otra-wrap').hidden = !(t === 'carrera' && $('#o-dist').value === 'otra');
+    $('#o-dist-otra').required = !$('#o-dist-otra-wrap').hidden;
   }
   $('#o-tipo').addEventListener('change', tipoObjetivo);
+  $('#o-dist').addEventListener('change', tipoObjetivo);
   $('#obj-nuevo').addEventListener('click', () => abrirObjetivo(null));
   $('#o-cancelar').addEventListener('click', () => { $('#f-obj').hidden = true; });
   $('#f-obj').addEventListener('submit', async (e) => {
@@ -529,8 +539,10 @@
     const o = {id: $('#o-id').value || 'o' + Date.now(), tipo, objetivo: $('#o-nombre').value.trim() || EJEMPLO[tipo], dia: $('#o-dia').value || null,
       creado: (prev && prev.creado) || iso(hoy())};
     if (COMP.includes(tipo)) { const m = (+$('#o-h').value || 0) * 60 + (+$('#o-m').value || 0); o.meta_min = m || null; }
-    if (tipo === 'carrera') o.distancia_km = +$('#o-dist').value;
+    if (tipo === 'carrera') o.distancia_km = $('#o-dist').value === 'otra' ? num('#o-dist-otra') : +$('#o-dist').value;
     if (tipo === 'triatlon') o.distancia = $('#o-tri').value;
+    if (tipo === 'duatlon') o.distancia = $('#o-dua').value;
+    if (['trail', 'ocr', 'ciclismo', 'aguas'].includes(tipo)) { o.distancia_km = num('#o-km-comp'); if (tipo !== 'aguas') o.desnivel = +$('#o-desnivel').value || 0; }
     if (tipo === 'peso') {
       o.peso_inicial = num('#o-peso-ini'); o.peso_objetivo = num('#o-peso-obj');
       // el peso actual también se apunta en el registro si no hay nada de hoy

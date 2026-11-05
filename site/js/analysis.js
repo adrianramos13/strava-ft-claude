@@ -5,7 +5,11 @@
   const ETIQUETA = {run: 'Carrera', hyrox: 'HYROX / funcional', strength: 'Fuerza', bike: 'Bici', swim: 'Natación', walk: 'Caminata', other: 'Otros'};
   const ORDEN = Object.keys(ETIQUETA);
   const CARGA_MIN = {run: 1.4, hyrox: 1.3, swim: 1.0, bike: 0.8, strength: 0.5, walk: 0.3, other: 0.5};
-  const TRI = {sprint: [0.75, 20, 5, 4], olimpico: [1.5, 40, 10, 5]};
+  // [nado km, bici km, carrera km, transiciones min, factor velocidad bici, factor carrera tras bici, nombre]
+  const TRI = {sprint: [0.75, 20, 5, 4, 1, 1.05, 'Distancia sprint'], olimpico: [1.5, 40, 10, 5, 1, 1.06, 'Distancia olímpica'],
+    half: [1.9, 90, 21.0975, 7, 0.93, 1.15, 'Medio Ironman (70.3)'], ironman: [3.8, 180, 42.195, 10, 0.88, 1.3, 'Ironman']};
+  // [carrera 1 km, bici km, carrera 2 km, transiciones min, nombre]
+  const DUA = {sprint: [5, 20, 2.5, 3, 'Duatlón sprint'], estandar: [10, 40, 5, 4, 'Duatlón estándar']};
   const DIA = 864e5;
 
   // ---------------------------------------------------------------- fechas
@@ -175,6 +179,16 @@
     return acts.filter((a) => a.sport === 'run' && a.km >= minKm && a.d >= addDays(hoy, -90) && a.min / a.km < 7.5);
   }
   function mejorPara(c, dist) { return c.reduce((b, a) => (riegel(a.min, a.km, dist) < riegel(b.min, b.km, dist) ? a : b)); }
+  const mmss = (seg) => `${Math.floor(seg / 60)}:${String(Math.round(seg % 60)).padStart(2, '0')}`;
+  // ritmo mediano de natación (s/100 m) y mejor velocidad en bici en exterior de los últimos 6 meses
+  function ritmoNado(acts, hoy) {
+    const sw = acts.filter((a) => a.sport === 'swim' && a.km >= 0.4 && a.d >= addDays(hoy, -180)).map((a) => a.seg_mov / a.km / 10).sort((a, b) => a - b);
+    return sw.length ? sw[Math.floor(sw.length / 2)] : null;
+  }
+  function velBici(acts, hoy) {
+    const bk = acts.filter((a) => a.sport === 'bike' && a.km >= 15 && a.d >= addDays(hoy, -180) && a.tipo !== 'VirtualRide' && !/clase|ciclo|group cycle|spinning/i.test(a.nombre || '')).map((a) => a.km / (a.seg_mov / 3600));
+    return bk.length ? Math.max(...bk) : null;
+  }
 
   function estimar(o0, acts, hoy) {
     const o = {...o0, notas: []};
@@ -205,19 +219,58 @@
         o.notas.push(`Si corres los 8 km a ${ritmo(p)}/km (${Math.round(correr)} min), te quedan ${Math.round(o.meta_min - correr)} min para las 8 estaciones y las transiciones.`);
       }
     } else if (o.tipo === 'triatlon') {
-      const [nado, bici, corre, trans] = TRI[o.distancia || 'olimpico'];
-      const lo = addDays(hoy, -180);
-      const sw = acts.filter((a) => a.sport === 'swim' && a.km >= 0.4 && a.d >= lo).map((a) => a.seg_mov / a.km / 10).sort((a, b) => a - b);
-      const bk = acts.filter((a) => a.sport === 'bike' && a.km >= 15 && a.d >= lo && a.tipo !== 'VirtualRide' && !/clase|ciclo|group cycle|spinning/i.test(a.nombre || '')).map((a) => a.km / (a.seg_mov / 3600));
-      const c = refCarrera(acts, hoy, 5);
-      if (sw.length && bk.length && c.length) {
-        const p100 = sw[Math.floor(sw.length / 2)], kmh = Math.max(...bk), b = mejorPara(c, corre);
-        const tN = p100 * nado * 10 / 60, tB = bici / kmh * 60, tC = riegel(b.min, b.km, corre) * 1.06;
+      const [nado, bici, corre, trans, fB, fC, nombre] = TRI[o.distancia || 'olimpico'];
+      const p100 = ritmoNado(acts, hoy), kmh = velBici(acts, hoy), c = refCarrera(acts, hoy, 5);
+      if (p100 && kmh && c.length) {
+        const b = mejorPara(c, corre);
+        const tN = p100 * nado * 10 / 60, tB = bici / (kmh * fB) * 60, tC = riegel(b.min, b.km, corre) * fC;
         est = tN + tB + tC + trans;
-        o.base = `Suma aproximada: natación a ${Math.floor(p100 / 60)}:${String(Math.round(p100 % 60)).padStart(2, '0')}/100 m, bici a ${dec(kmh)} km/h, ${corre} km corriendo tras la bici y transiciones.`;
+        o.base = `Suma aproximada: natación a ${mmss(p100)}/100 m, bici a ${dec(kmh * fB)} km/h, ${dec(corre, corre % 1 ? 1 : 0)} km corriendo tras la bici y transiciones.`;
         if (o.meta_min) { const resto = o.meta_min - tN - tC - trans; if (resto > 0) o.notas.push(`Con tu natación (${hm(tN)}) y tu carrera (${hm(tC)}) actuales más ${trans} min de transiciones, necesitas la bici a ${dec(bici / (resto / 60))} km/h de media. Ahora vas a ${dec(kmh)} km/h en exterior.`); }
       } else o.base = 'Faltan datos recientes de natación, bici en exterior o carrera para estimarlo.';
-      o.notas.push(`Distancia ${o.distancia === 'sprint' ? 'sprint' : 'olímpica'}: ${String(nado).replace('.', ',')} km nadando, ${bici} km en bici y ${corre} km corriendo.`);
+      o.notas.push(`${nombre}: ${String(nado).replace('.', ',')} km nadando, ${bici} km en bici y ${dec(corre, corre % 1 ? 1 : 0)} km corriendo.`);
+      if (o.distancia === 'ironman' || o.distancia === 'half') o.notas.push('En larga distancia la clave es la nutrición en carrera: entrena comer y beber en las tiradas largas de bici.');
+    } else if (o.tipo === 'duatlon') {
+      const [c1, bici, c2, trans, nombre] = DUA[o.distancia || 'sprint'];
+      const kmh = velBici(acts, hoy), c = refCarrera(acts, hoy, 5);
+      if (kmh && c.length) {
+        const b = mejorPara(c, c1);
+        const t1 = riegel(b.min, b.km, c1) * 1.02, tB = bici / kmh * 60, t2 = riegel(b.min, b.km, c2) * 1.1;
+        est = t1 + tB + t2 + trans;
+        o.base = `Suma aproximada: ${c1} km corriendo, ${bici} km de bici a ${dec(kmh)} km/h, ${dec(c2, c2 % 1 ? 1 : 0)} km tras la bici y transiciones.`;
+        if (o.meta_min) o.notas.push(`Primer tramo a unos ${ritmo(t1 / c1)}/km sin pasarte: el segundo tramo siempre cuesta más de lo que parece.`);
+      } else o.base = 'Faltan datos recientes de carrera o bici en exterior para estimarlo.';
+      o.notas.push(`${nombre}: ${c1} km + ${bici} km en bici + ${dec(c2, c2 % 1 ? 1 : 0)} km.`);
+    } else if (o.tipo === 'trail' || o.tipo === 'ocr') {
+      // distancia equivalente en llano: cada 100 m de desnivel positivo cuentan como 1 km
+      const km = +o.distancia_km, dmas = +o.desnivel || 0, equiv = km + dmas / 100;
+      const c = refCarrera(acts, hoy, 5);
+      if (c.length) {
+        const b = mejorPara(c, equiv);
+        const terreno = o.tipo === 'ocr' ? 1.2 : 1.08;  // obstáculos o terreno técnico
+        est = riegel(b.min, b.km, equiv) * terreno;
+        o.base = `Proyección desde tu mejor carrera reciente: ${dec(km)} km con ${dmas} m D+ equivalen a ${dec(equiv)} km en llano${o.tipo === 'ocr' ? ', más el tiempo de los obstáculos' : ', más un margen por terreno'}.`;
+      } else o.base = 'Aún no hay una carrera continua reciente que sirva de referencia.';
+      if (o.meta_min) o.notas.push(`Ritmo medio necesario: ${ritmo(o.meta_min / km)}/km (en subida irás más lento y en bajada más rápido).`);
+      o.notas.push(o.tipo === 'ocr' ? 'Prioriza el agarre (dominadas, farmer walks, colgarte de la barra) y cargar peso corriendo.' : 'Entrena cuestas y bajadas, y alguna tirada larga por montaña con el desnivel de la carrera.');
+    } else if (o.tipo === 'ciclismo') {
+      const km = +o.distancia_km, dmas = +o.desnivel || 0, kmh = velBici(acts, hoy);
+      if (kmh) {
+        // en llano a tu velocidad, más el tiempo extra de subir (unos 600 m de desnivel por hora para un cicloturista)
+        const extra = dmas / 600 * 60 * 0.6;
+        est = km / kmh * 60 + extra;
+        o.base = `Estimación: ${dec(km, 0)} km a tu velocidad en exterior (${dec(kmh)} km/h) más el tiempo extra por ${dmas} m de desnivel.`;
+      } else o.base = 'Faltan salidas recientes en bici en exterior para estimarlo.';
+      if (o.meta_min) o.notas.push(`Velocidad media necesaria: ${dec(km / (o.meta_min / 60))} km/h.`);
+      o.notas.push('Practica comer cada 30–45 min y beber en marcha en las salidas largas.');
+    } else if (o.tipo === 'aguas') {
+      const km = +o.distancia_km, p100 = ritmoNado(acts, hoy);
+      if (p100) {
+        est = p100 * 1.06 * km * 10 / 60;  // en abierto, sin paredes ni corcheras, se va algo más lento
+        o.base = `Desde tu ritmo medio en piscina (${mmss(p100)}/100 m) con un margen por nadar en abierto.`;
+      } else o.base = 'Faltan sesiones de natación recientes para estimarlo.';
+      if (o.meta_min) o.notas.push(`Ritmo necesario: ${mmss(o.meta_min * 60 / (km * 10))}/100 m.`);
+      o.notas.push('Practica orientarte levantando la vista cada 6–8 brazadas y, si puedes, nada alguna vez en abierto antes de la prueba.');
     }
     o.estimacion_min = est;
     o.estimacion = est ? hm(est) : '—';
@@ -230,7 +283,7 @@
   }
 
   // ---------------------------------------------- objetivos no competitivos
-  const COMPETICION = ['carrera', 'hyrox', 'triatlon'];
+  const COMPETICION = ['carrera', 'trail', 'ocr', 'hyrox', 'triatlon', 'duatlon', 'ciclismo', 'aguas'];
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
   const kg = (x) => `${dec(x, 1).replace(',0', '')} kg`;
   // pendiente (unidades por día) de una regresión lineal sobre [{d, v}]
@@ -340,14 +393,14 @@
   function planKm(acts, objetivos, hoy) {
     const real = new Map();
     acts.filter((a) => a.sport === 'run').forEach((a) => { const k = iso(lunes(a.d)); real.set(k, (real.get(k) || 0) + a.km); });
-    const carrera = objetivos.filter((o) => o.tipo === 'carrera' && parse(o.dia) > hoy).sort((a, b) => (a.dia < b.dia ? -1 : 1));
+    const carrera = objetivos.filter((o) => ['carrera', 'trail', 'ocr'].includes(o.tipo) && parse(o.dia) > hoy).sort((a, b) => (a.dia < b.dia ? -1 : 1));
     const l0 = lunes(hoy);
     const fin = carrera.length ? lunes(parse(carrera[0].dia)) : addDays(l0, 84);
     const dist = carrera.length ? +carrera[0].distancia_km : 10;
     const pico = dist <= 10 ? 35 : dist <= 21.1 ? 45 : 60;
     let ult4 = 0; for (let i = 1; i <= 4; i++) ult4 += real.get(iso(addDays(l0, -7 * i))) || 0;
     const inicio = Math.max(10, Math.round(ult4 / 4));
-    const otros = new Set(objetivos.filter((o) => (o.tipo === 'hyrox' || o.tipo === 'triatlon') && parse(o.dia) < fin).map((o) => iso(lunes(parse(o.dia)))));
+    const otros = new Set(objetivos.filter((o) => ['hyrox', 'triatlon', 'duatlon', 'ciclismo', 'aguas'].includes(o.tipo) && parse(o.dia) < fin).map((o) => iso(lunes(parse(o.dia)))));
     const semanasPlan = Math.max(1, Math.round((fin - l0) / DIA / 7));
     const construir = Math.max(1, semanasPlan - 2);
     const out = [];
@@ -369,6 +422,11 @@
     carrera: ['Específico: {n}', 'Tempo a ritmo objetivo en bloques cada vez más largos y tirada larga con los últimos km a ritmo. Sube el volumen sin pasar de un 10 % por semana.'],
     hyrox: ['Específico: {n}', 'Carrera "comprometida": 1 km fuerte y una estación justo después (sled, wall balls, lunges). Simulación completa cada 3–4 semanas.'],
     triatlon: ['Específico: {n}', 'Natación 2–3 veces por semana, bici en exterior 2 veces (una larga) y sesiones combinadas de bici y carrera.'],
+    trail: ['Específico: {n}', 'Cuestas, tiradas largas por montaña con desnivel, práctica de bajadas y fuerza de pierna y tobillo.'],
+    ocr: ['Específico: {n}', 'Carrera con cambios de ritmo, circuitos de fuerza y agarre (dominadas, cargas, colgarse) y cuestas.'],
+    duatlon: ['Específico: {n}', 'Series de carrera, bici con cambios de ritmo y combinados carrera + bici + carrera para practicar las transiciones.'],
+    ciclismo: ['Específico: {n}', 'Salidas largas en bici que crecen cada semana, trabajo de subida a ritmo constante y una sesión de intervalos.'],
+    aguas: ['Específico: {n}', 'Natación 3 veces por semana (técnica, series y nado continuo largo), orientación y algo de fuerza de espalda y core.'],
     afinar: ['Afinar y competir: {n}', 'Baja el volumen un 40 %, mantén algo de intensidad y descansa los 2 días previos.'],
   };
   function planFases(objetivos, hoy) {

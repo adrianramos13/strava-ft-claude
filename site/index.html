@@ -214,19 +214,29 @@
               <option value="fuerza">Fuerza en un ejercicio</option><option value="volumen">Volumen (km acumulados)</option><option value="otro">Otro</option>
             </optgroup>
             <optgroup label="Competición">
-              <option value="carrera">Carrera a pie</option><option value="hyrox">HYROX</option><option value="triatlon">Triatlón</option>
+              <option value="carrera">Carrera a pie (asfalto)</option><option value="trail">Trail / montaña</option><option value="ocr">Carrera de obstáculos (OCR, Spartan…)</option>
+              <option value="hyrox">HYROX</option><option value="triatlon">Triatlón</option><option value="duatlon">Duatlón</option>
+              <option value="ciclismo">Ciclismo (marcha, gran fondo)</option><option value="aguas">Natación en aguas abiertas</option>
             </optgroup>
           </select>
         </label>
         <label>Nombre<input type="text" id="o-nombre" required maxlength="50" placeholder="Por ejemplo: Estar en forma"></label>
 
         <label data-tipos="carrera">Distancia
-          <select id="o-dist"><option value="5">5 km</option><option value="10">10 km</option><option value="21.0975">Media maratón</option><option value="42.195">Maratón</option></select>
+          <select id="o-dist"><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="21.0975">Media maratón</option><option value="30">30 km</option><option value="42.195">Maratón</option><option value="otra">Otra distancia</option></select>
         </label>
+        <label id="o-dist-otra-wrap" hidden>Distancia (km)<input type="text" id="o-dist-otra" inputmode="decimal" placeholder="por ejemplo 8"></label>
         <label data-tipos="triatlon">Distancia
-          <select id="o-tri"><option value="sprint">Sprint</option><option value="olimpico">Olímpico</option></select>
+          <select id="o-tri"><option value="sprint">Sprint (750 m · 20 km · 5 km)</option><option value="olimpico">Olímpico (1,5 · 40 · 10)</option><option value="half">Medio Ironman 70.3 (1,9 · 90 · 21,1)</option><option value="ironman">Ironman (3,8 · 180 · 42,2)</option></select>
         </label>
-        <div class="row2" data-tipos="carrera,hyrox,triatlon">
+        <label data-tipos="duatlon">Distancia
+          <select id="o-dua"><option value="sprint">Sprint (5 · 20 · 2,5 km)</option><option value="estandar">Estándar (10 · 40 · 5 km)</option></select>
+        </label>
+        <div class="row2" data-tipos="trail,ocr,ciclismo,aguas">
+          <label>Distancia (km)<input type="text" id="o-km-comp" inputmode="decimal" placeholder="por ejemplo 21"></label>
+          <label data-tipos="trail,ocr,ciclismo">Desnivel positivo (m)<input type="number" id="o-desnivel" min="0" max="15000" inputmode="numeric" placeholder="por ejemplo 1200"></label>
+        </div>
+        <div class="row2" data-tipos="carrera,trail,ocr,hyrox,triatlon,duatlon,ciclismo,aguas">
           <label>Meta (h)<input type="number" id="o-h" min="0" max="15" inputmode="numeric" placeholder="1"></label>
           <label>Meta (min)<input type="number" id="o-m" min="0" max="59" inputmode="numeric" placeholder="40"></label>
         </div>
