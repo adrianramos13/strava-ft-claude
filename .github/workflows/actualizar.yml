@@ -10,9 +10,10 @@ permissions:
   pages: write
   id-token: write
 
+# una publicación espera a que termine la anterior (cortarla a medias puede dejar Pages bloqueado)
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publicar:
