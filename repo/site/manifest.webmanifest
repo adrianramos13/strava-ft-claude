@@ -1,0 +1,38 @@
+{
+  "name": "Entreno",
+  "short_name": "Entreno",
+  "description": "Tu panel de entrenamiento: forma, objetivos y plan semanal.",
+  "id": "./",
+  "start_url": "./#inicio",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f4",
+  "theme_color": "#0f766e",
+  "lang": "es",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ],
+  "shortcuts": [
+    {"name": "Añadir entreno", "url": "./#anadir"},
+    {"name": "Plan de la semana", "url": "./#semana"}
+  ],
+  "share_target": {
+    "action": "./compartir",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "archivos",
+          "accept": [".fit", ".gpx", ".tcx", ".gz", "application/octet-stream", "application/vnd.ant.fit", "application/fit",
+                     "application/gpx+xml", "application/vnd.garmin.tcx+xml", "application/gzip", "application/xml", "text/xml", "*/*"]
+        }
+      ]
+    }
+  }
+}

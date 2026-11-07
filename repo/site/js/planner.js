@@ -1,0 +1,275 @@
+/* Propuesta de entrenos de una semana según objetivos, fase, estado de forma y días disponibles. */
+(() => {
+  const {iso, parse, addDays, ritmo} = window.AN;
+  const NOMBRE_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+  // opts.futuro: semana de un plan a largo plazo (no se ajusta por el cansancio de hoy)
+  function proponer(R, perfil, semanaIso, disponibles, minutosDia, opts = {}) {
+    const w0 = parse(semanaIso);
+    const fin = addDays(w0, 6);
+    const objetivos = (R ? R.objetivos : []) || [];
+    const fases = R ? R.fases : [];
+    const fase = fases.find((f) => f.desde <= iso(fin) && f.hasta >= semanaIso) || {tipo: 'base', titulo: 'Base aeróbica'};
+    const futuros = objetivos.filter((o) => o.competicion && o.dia >= semanaIso);
+    const tieneTri = futuros.some((o) => o.tipo === 'triatlon');
+    const tieneHyrox = futuros.some((o) => o.tipo === 'hyrox');
+    const carrera = futuros.find((o) => o.tipo === 'carrera');
+    const competicion = objetivos.find((o) => o.competicion && o.dia >= semanaIso && o.dia <= iso(fin));
+    // semana siguiente a una competición: recuperación (salvo que haya otra prueba esta misma semana)
+    const recien = !competicion && objetivos.find((o) => o.competicion && o.dia < semanaIso && o.dia >= iso(addDays(w0, -7)));
+    // objetivos sin competición que siguen activos (peso, fuerza, forma, volumen, otros)
+    const otros = objetivos.filter((o) => !o.competicion && o.estado !== 'conseguido' && (!o.dia || o.dia >= semanaIso));
+    const pesoObj = otros.find((o) => o.foco === 'peso');
+    const fuerzaObjs = otros.filter((o) => o.tipo === 'fuerza');
+    const formaObj = otros.find((o) => o.tipo === 'forma');
+    const volObj = otros.find((o) => o.tipo === 'volumen');
+    const cardio = (R && R.cardioPref) || 'run';
+    // objetivo de la fase en curso (para ajustar distancias de las sesiones)
+    const objFase = objetivos.find((o) => o.id === fase.objetivo) || null;
+    const largaDist = !!objFase && objFase.tipo === 'triatlon' && ['half', 'ironman'].includes(objFase.distancia);
+    const DEPORTE_COMP = {carrera: 'run', trail: 'run', ocr: 'run', hyrox: 'hyrox', triatlon: 'bike', duatlon: 'run', ciclismo: 'bike', aguas: 'swim'};
+
+    // ritmos
+    const r10 = (R && R.ritmo10k) || 6.0;
+    const z = {suave: r10 + 1.1, largo: r10 + 1.0, tempo: carrera && carrera.ritmo_meta ? carrera.ritmo_meta : r10 + 0.25, series: r10 - 0.1, hyrox: r10 + 0.5};
+    const rz = (p) => `${ritmo(p)}/km`;
+    const rango = (p) => `${ritmo(p - 0.1)}–${ritmo(p + 0.1)}/km`;
+
+    // volumen de carrera de la semana
+    const plan = R ? R.kmSemana.find((s) => s.semana === semanaIso) : null;
+    // fuera del horizonte del plan de km (después de la carrera principal) se mantiene un volumen de carrera moderado
+    const maxPlan = R ? Math.max(0, ...R.kmSemana.map((s) => s.km_plan || 0)) : 0;
+    let km = plan && plan.km_plan != null ? plan.km_plan : (maxPlan ? Math.round(maxPlan * 0.6) : 20);
+    const notas = [];
+    if (volObj && volObj.deporte === 'run' && volObj.km_semana_necesarios) km = Math.max(km, Math.round(volObj.km_semana_necesarios));
+    let factor = 1;
+    if (!opts.futuro && R && R.estado && R.estado.frescura < -25) { factor = 0.8; notas.push(`Vienes muy cargado (frescura ${R.estado.frescura}): bajo el volumen un 20 % y quito intensidad.`); }
+    if (plan && plan.descarga && !competicion && !recien) notas.push('Semana de descarga: menos volumen para asimilar lo entrenado.');
+    if (recien) { factor = 0.5; notas.push(`Semana de recuperación tras ${recien.objetivo}: todo suave y corto. Vuelve a apretar solo si las piernas responden.`); }
+    km *= factor;
+
+    const capLargo = carrera ? (carrera.distancia_km <= 10 ? 14 : carrera.distancia_km <= 21.1 ? 20 : 32) : tieneHyrox ? 16 : 15;
+    // la tirada larga no baja de lo que ya has hecho hace poco (sin pasar del tope del objetivo)
+    const reciente = R && R.largo8 ? Math.round(R.largo8 * 0.9) : 0;
+    // progresa desde lo que haces ahora hasta el tope del objetivo a medida que sube el volumen del plan
+    const kmIni = R ? ((R.kmSemana.find((s) => s.km_plan != null) || {}).km_plan || km) : km;
+    const progreso = maxPlan > kmIni ? Math.max(0, Math.min(1, (km - kmIni) / (maxPlan - kmIni))) : 0;
+    const baseLargo = Math.min(capLargo, Math.max(Math.round(km * 0.33), reciente));
+    const largoKm = Math.max(6, Math.round(baseLargo + (capLargo - baseLargo) * progreso));
+    const dur = (kms, p) => Math.round(kms * p + 10);
+
+    const S = {
+      largo: () => ({sport: 'run', dura: true, larga: true, titulo: 'Tirada larga', km: largoKm, min: dur(largoKm, z.largo),
+        detalle: fase.tipo === 'carrera' ? `${largoKm} km suaves (${rango(z.largo)}); los últimos ${Math.min(5, Math.round(largoKm / 4))} km a ritmo objetivo (${rz(z.tempo)}).` : `${largoKm} km a ritmo cómodo (${rango(z.largo)}), pudiendo hablar.`}),
+      // las series y el tempo crecen con el progreso del plan (y bajan en semanas de descarga)
+      series: () => {
+        const base = fase.tipo === 'base';
+        const reps = base ? 6 + Math.round(progreso * 4) : 4 + Math.round(progreso * 3);
+        const tramo = base ? 400 : 1000;
+        const k = Math.round(5 + reps * tramo / 1000 * 1.4);
+        return {sport: 'run', dura: true, titulo: 'Series', km: k, min: Math.round(30 + reps * (base ? 3.5 : 6.5)),
+          detalle: `15 min de calentamiento, ${reps} × ${tramo === 1000 ? '1 km' : '400 m'} a ${rz(z.series)} con ${base ? '90 s' : '2 min'} de trote suave entre series, y 10 min de vuelta a la calma.`};
+      },
+      tempo: () => {
+        const bloque = 10 + Math.round(progreso * 3) * 5;  // 10 → 25 min
+        const k = Math.round(5 + (2 * bloque) / z.tempo);
+        return {sport: 'run', dura: true, titulo: 'Tempo a ritmo objetivo', km: k, min: 30 + 2 * bloque + 3,
+          detalle: `15 min suaves, 2 × ${bloque} min a ${rz(z.tempo)} con 3 min suaves entre medias, y 10 min de vuelta a la calma.`};
+      },
+      suave: (n = 1) => { const k = Math.max(6, Math.min(10, Math.round(km * 0.2))); return {sport: 'run', titulo: n > 1 ? 'Rodaje suave (2)' : 'Rodaje suave', km: k, min: dur(k, z.suave), detalle: `${k} km en Z2 (${rango(z.suave)}). Tiene que parecerte fácil.`}; },
+      fuerza: (n = 1) => ({sport: 'strength', titulo: n > 1 ? 'Fuerza: tren superior y core' : 'Fuerza: pierna y core', min: 55,
+        detalle: n > 1 ? 'Press, remo, dominadas o jalón y core. 3–4 series de 6–10 repeticiones.' : 'Sentadilla, peso muerto o hip thrust, zancadas y core. 3–4 series de 5–8 repeticiones, sin llegar al fallo.'}),
+      hyrox: () => ({sport: 'hyrox', dura: true, titulo: 'HYROX: carrera comprometida', min: 60,
+        detalle: `5 × (1 km a ${rz(z.hyrox)} + una estación: sled push, burpee broad jumps, remo, wall balls o lunges). Descansa 2 min entre bloques.`}),
+      simulacro: () => ({sport: 'hyrox', dura: true, larga: true, titulo: 'Simulacro HYROX', min: 80,
+        detalle: 'Media simulación: 4 × (1 km + estación) a ritmo de carrera, apuntando tiempos de cada estación y de las transiciones.'}),
+      nado: (n = 1) => ({sport: 'swim', titulo: n > 1 ? 'Natación: series' : 'Natación técnica', min: 45,
+        detalle: n > 1 ? '300 m de calentamiento, 10 × 100 m a ritmo fuerte con 20 s de descanso y 200 m suaves.' : '1.500–2.000 m: ejercicios de técnica, respiración bilateral y 4 × 200 m cómodos.'}),
+      biciLarga: () => (largaDist
+        ? {sport: 'bike', dura: true, larga: true, titulo: 'Bici larga en exterior', min: 210, detalle: '3–5 h en Z2 con 2–3 bloques de 20 min a ritmo de competición. Come cada 30–45 min y bebe en marcha: es tu entreno de nutrición.'}
+        : {sport: 'bike', dura: true, larga: true, titulo: 'Bici larga en exterior', min: 150, detalle: '2–3 h en Z2 con 3 × 10 min a ritmo de competición. Practica comer y beber en marcha.'}),
+      // trail, obstáculos, duatlón, ciclismo y aguas abiertas
+      cuestas: () => ({sport: 'run', dura: true, titulo: 'Cuestas', km: 8, min: 55, detalle: '15 min suaves, 8–10 × 60–90 s subiendo fuerte una cuesta con buena pendiente, bajando al trote, y 10 min suaves.'}),
+      largoMontana: () => {
+        const h = objFase && objFase.distancia_km > 30 ? '3–4 h' : '1 h 30 – 2 h 30';
+        return {sport: 'run', dura: true, larga: true, titulo: 'Tirada larga por montaña', min: objFase && objFase.distancia_km > 30 ? 210 : 120,
+          detalle: `${h} por senderos con desnivel, a ritmo cómodo (andando en las subidas fuertes). Practica las bajadas y el avituallamiento.`};
+      },
+      agarre: () => ({sport: 'strength', titulo: 'Fuerza y agarre', min: 55, detalle: 'Dominadas o colgarse de la barra, farmer walks, remo, zancadas con peso y core. Termina con 3 × 30 s colgado.'}),
+      circuito: () => ({sport: 'hyrox', dura: true, titulo: 'Circuito de carrera + obstáculos', min: 50, detalle: '6 × (600 m fuerte + 10 burpees + 20 m de arrastre o transporte de peso). 2 min de descanso entre bloques.'}),
+      biciSeries: () => ({sport: 'bike', dura: true, titulo: 'Bici: intervalos', min: 75, detalle: '20 min suaves, 4–5 × 6–8 min a ritmo fuerte y constante (como subiendo un puerto) con 3 min suaves, y 10 min suaves.'}),
+      biciSuave: (n = 1) => ({sport: 'bike', titulo: n > 1 ? 'Bici suave (2)' : 'Bici suave', min: 75, detalle: '60–90 min en Z2, cadencia ágil (85–95 rpm). Debes poder hablar.'}),
+      biciSubida: () => ({sport: 'bike', dura: true, titulo: 'Bici: subidas', min: 120, detalle: 'Ruta con subidas largas: súbelas a ritmo constante, sentado, sin cebarte al principio. Practica el desarrollo que llevarás.'}),
+      dua: () => ({sport: 'run', dura: true, titulo: 'Combinado carrera + bici + carrera', min: 80, detalle: '15 min de carrera a ritmo de duatlón, 40 min de bici con cambios de ritmo y 10 min de carrera. Practica las transiciones.'}),
+      nadoLargo: () => ({sport: 'swim', dura: true, larga: true, titulo: 'Natación continua larga', min: 60, detalle: `Nado continuo de ${objFase && objFase.distancia_km ? Math.round(objFase.distancia_km * 0.8 * 10) / 10 : 2} km o más a ritmo de prueba, levantando la vista cada 6–8 brazadas para practicar la orientación.`}),
+      combinado: () => ({sport: 'bike', dura: true, titulo: 'Combinado bici + carrera', min: 85, detalle: '60 min de bici con los últimos 15 a ritmo de competición y, sin parar, 15–20 min de carrera a ritmo de 10K.'}),
+      activacion: () => ({sport: 'run', titulo: 'Activación', km: 5, min: 35, detalle: `20 min suaves + 4 × 1 min a ritmo de competición y 4 rectas progresivas.`}),
+      movilidad: () => ({sport: 'other', titulo: 'Movilidad y estiramientos', min: 25, detalle: '20–30 min de movilidad de cadera, tobillos y espalda. Recuperación activa.'}),
+      // sesiones para objetivos de salud, peso y fuerza
+      cardioZ2: (larga, n = 1) => {
+        const t = larga ? 75 : 45;
+        const txt = {run: larga ? `Rodaje largo y suave (${rango(z.largo)})` : `Rodaje suave en Z2 (${rango(z.suave)})`, bike: 'Bici en Z2, cadencia cómoda', swim: 'Natación continua a ritmo cómodo', walk: 'Caminata rápida, a ritmo de no poder cantar'}[cardio];
+        return {sport: cardio, larga: !!larga, dura: !!larga, titulo: larga ? 'Cardio largo suave' : n > 1 ? 'Cardio suave (2)' : 'Cardio suave', min: t,
+          detalle: `${t} min. ${txt}. Debes poder mantener una conversación.${pesoObj ? ' Es la sesión que más grasa quema sin fatigarte.' : ''}`};
+      },
+      hiit: () => ({sport: 'hyrox', dura: true, titulo: 'Intervalos (HIIT)', min: 30,
+        detalle: '10 min de calentamiento y 10 × (40 s fuerte / 20 s suave) en bici, remo, burpees o kettlebell swings. 5 min de vuelta a la calma.'}),
+      fuerzaTotal: (n = 1) => ({sport: 'strength', titulo: n > 1 ? 'Fuerza cuerpo completo (B)' : 'Fuerza cuerpo completo (A)', min: 55,
+        detalle: n > 1 ? 'Peso muerto o hip thrust, press de hombros, jalón o dominadas, zancadas y core. 3 series de 8–10.' : 'Sentadilla, press de banca, remo, puente de glúteo y plancha. 3–4 series de 6–10, dejando 1–2 repeticiones en recámara.'}),
+      fuerzaObjetivo: (o, pesada) => {
+        const rm = o.rm_actual;
+        const carga = (p) => (rm ? ` (~${String(Math.round(rm * p / 2.5) * 2.5).replace('.', ',')} kg)` : '');
+        return {sport: 'strength', dura: pesada, titulo: `Fuerza: ${o.ejercicio}${pesada ? ' pesado' : ' volumen'}`, min: 60,
+          detalle: pesada
+            ? `${o.ejercicio}: calentamiento progresivo y 5 × 3–5 al 80–85 %${carga(0.825)}, descansando 3 min. Después, 2–3 accesorios del mismo grupo muscular.`
+            : `${o.ejercicio}: 4 × 6–8 al 70–75 %${carga(0.725)}, descansando 2 min, con técnica perfecta. Después, accesorios y core.`};
+      },
+    };
+
+    let prioridad;
+    if (competicion) {
+      const dc = DEPORTE_COMP[competicion.tipo];
+      const act = dc === 'bike' ? () => ({...S.biciSuave(), titulo: 'Activación en bici', min: 45, detalle: '30 min suaves con 4 × 1 min a ritmo de competición.'})
+        : dc === 'swim' ? () => ({...S.nado(1), titulo: 'Activación en el agua', min: 30, detalle: '1.000 m suaves con 4 × 50 m a ritmo de prueba.'}) : S.activacion;
+      prioridad = [act, S.suave, S.movilidad, S.fuerza, S.suave, S.movilidad, S.movilidad];
+    } else if (recien) {
+      prioridad = [S.suave, S.movilidad, () => ({...S.fuerzaTotal(1), titulo: 'Fuerza ligera', detalle: 'Circuito suave de cuerpo completo con poco peso, sin llegar a cansarte. Solo para activar.'}),
+        () => S.cardioZ2(false), () => S.suave(2), S.movilidad, () => S.cardioZ2(false, 2)];
+    }
+    else if (fase.tipo === 'carrera') prioridad = [S.largo, S.tempo, S.fuerza, S.suave, S.series, tieneTri ? S.nado : () => S.suave(2), S.movilidad];
+    else if (fase.tipo === 'hyrox') prioridad = [S.hyrox, S.largo, S.fuerza, S.series, () => (Math.round((w0 - parse(fase.desde)) / 6048e5) % 3 === 2 ? S.simulacro() : S.hyrox()), S.suave, () => S.fuerza(2)];
+    else if (fase.tipo === 'triatlon') prioridad = [S.biciLarga, S.nado, S.series, S.combinado, () => S.nado(2), S.fuerza, S.suave];
+    else if (fase.tipo === 'trail') prioridad = [S.largoMontana, S.cuestas, S.fuerza, S.suave, S.series, () => S.suave(2), S.movilidad];
+    else if (fase.tipo === 'ocr') prioridad = [S.circuito, S.largo, S.agarre, S.cuestas, S.suave, S.fuerza, S.movilidad];
+    else if (fase.tipo === 'duatlon') prioridad = [S.dua, S.series, S.biciLarga, S.suave, S.fuerza, S.biciSuave, S.movilidad];
+    else if (fase.tipo === 'ciclismo') prioridad = [S.biciLarga, S.biciSeries, S.biciSuave, S.fuerza, S.biciSubida, () => S.biciSuave(2), S.movilidad];
+    else if (fase.tipo === 'aguas') prioridad = [() => S.nado(1), () => S.nado(2), S.nadoLargo, S.fuerza, () => S.cardioZ2(false), S.movilidad, () => S.cardioZ2(false, 2)];
+    else if (fase.tipo === 'peso') prioridad = [() => S.fuerzaTotal(1), () => S.cardioZ2(false), S.hiit, () => S.fuerzaTotal(2), () => S.cardioZ2(true), () => S.cardioZ2(false, 2), S.movilidad];
+    else if (fase.tipo === 'fuerza') prioridad = [() => S.fuerzaTotal(1), () => S.cardioZ2(false), () => S.fuerzaTotal(2), S.hiit, () => S.cardioZ2(true), S.movilidad, () => S.cardioZ2(false, 2)];
+    else if (fase.tipo === 'forma') prioridad = [() => S.cardioZ2(false), () => S.fuerzaTotal(1), cardio === 'run' ? S.series : S.hiit, () => S.fuerzaTotal(2), () => S.cardioZ2(true), S.movilidad, () => S.cardioZ2(false, 2)];
+    else prioridad = [S.largo, S.series, S.fuerza, S.suave, tieneHyrox ? S.hyrox : () => S.fuerza(2), tieneTri ? S.nado : () => S.suave(2), S.movilidad];
+
+    // los objetivos no competitivos añaden lo que necesitan a la semana
+    if (!competicion) {
+      const meter = (pos, f) => { prioridad.splice(Math.min(pos, prioridad.length), 0, f); };
+      // fuerza: el ejercicio objetivo sustituye a una sesión de fuerza genérica, y una segunda sesión sube en prioridad
+      fuerzaObjs.slice(0, 2).forEach((o, i) => {
+        const idx = prioridad.findIndex((f) => { const s = f(); return s.sport === 'strength' && !s.objetivo; });
+        const pesada = () => ({...S.fuerzaObjetivo(o, true), objetivo: o.id});
+        const volumen = () => ({...S.fuerzaObjetivo(o, false), objetivo: o.id});
+        if (idx >= 0 && i === 0) prioridad[idx] = pesada; else meter(1 + i, pesada);
+        meter(4, volumen);
+      });
+      if (pesoObj && !['peso', 'fuerza', 'forma'].includes(fase.tipo)) {
+        // con una carrera a la vista, el peso pide más fuerza y más cardio suave, no más intensidad
+        const fuerzaPronto = prioridad.slice(0, 3).some((f) => f().sport === 'strength');
+        if (!fuerzaPronto) meter(2, () => S.fuerzaTotal(1));
+        meter(5, () => S.cardioZ2(false, 2));
+      }
+    }
+    const disp = [...disponibles].sort((a, b) => a - b);
+    // ¿cuántas sesiones conviene? Los días marcados son el máximo, no una obligación.
+    const BASE_FASE = {base: 4, carrera: 5, trail: 5, ocr: 4, hyrox: 5, triatlon: 6, duatlon: 5, ciclismo: 4, aguas: 4, peso: 5, fuerza: 4, forma: 4, afinar: 4};
+    let rec = BASE_FASE[fase.tipo] || 4;
+    const motivo = [];
+    // no saltar de golpe: como mucho 2 sesiones más que tu media de las últimas 4 semanas
+    const hoyIso = iso(new Date());
+    const ult = R && R.acts ? new Set(R.acts.filter((a) => a.fecha.slice(0, 10) > iso(addDays(parse(hoyIso), -28))).map((a) => a.fecha.slice(0, 10))).size / 4 : null;
+    if (ult != null && !opts.futuro && rec > Math.round(ult) + 2) { rec = Math.round(ult) + 2; motivo.push(`subes poco a poco desde tus ${String(Math.round(ult * 10) / 10).replace('.', ',')} días/semana actuales`); }
+    if (formaObj && +formaObj.dias_semana > rec) { rec = +formaObj.dias_semana; motivo.push(`tu objetivo «${formaObj.objetivo}» pide ${formaObj.dias_semana} días`); }
+    if (competicion) { rec = 3; motivo.push('es semana de competición (la prueba va aparte)'); }
+    if (recien) { rec = 3; motivo.push('toca recuperar tras la prueba'); }
+    if (plan && plan.descarga && !competicion && !recien) { rec -= 1; motivo.push('es semana de descarga'); }
+    if (!opts.futuro && R && R.estado && R.estado.frescura < -25) { rec -= 1; motivo.push('vienes muy cargado'); }
+    rec = Math.max(2, Math.min(7, rec));
+    const nSes = Math.min(disp.length, rec);
+    // si sobran días, se eligen los más repartidos (con el fin de semana para la sesión larga)
+    let dias = disp;
+    if (nSes < disp.length) {
+      const elegidos = [];
+      const finde = disp.filter((d) => d >= 5);
+      if (finde.length) elegidos.push(finde.reduce((a, b) => ((minutosDia[b] || 60) >= (minutosDia[a] || 60) ? b : a)));
+      while (elegidos.length < nSes) {
+        const gap = (d) => Math.min(...elegidos.map((e) => Math.min(Math.abs(e - d), 7 - Math.abs(e - d))), 7);
+        const cand = disp.filter((d) => !elegidos.includes(d)).sort((a, b) => gap(b) - gap(a) || (minutosDia[b] || 60) - (minutosDia[a] || 60) || a - b);
+        elegidos.push(cand[0]);
+      }
+      dias = elegidos.sort((a, b) => a - b);
+      notas.unshift(`Tienes ${disp.length} días disponibles y te propongo ${nSes} sesiones${motivo.length ? ` porque ${motivo.join(' y ')}` : ': es lo que mejor encaja con tu fase'}. Los demás días, descanso o un paseo.`);
+    }
+    // evita sesiones repetidas de más (máx. 3 de fuerza) al recortar a los días elegidos
+    const sesiones = [];
+    for (const f of prioridad) {
+      if (sesiones.length >= dias.length) break;
+      const s = f();
+      if (s.sport === 'strength' && sesiones.filter((x) => x.sport === 'strength').length >= 3) continue;
+      if (sesiones.some((x) => x.titulo === s.titulo)) continue;
+      sesiones.push(s);
+    }
+    while (sesiones.length < dias.length) sesiones.push(S.movilidad());
+    if (dias.length <= 2 && !sesiones.some((s) => s.sport === 'strength') && dias.length) notas.push('Con tan pocos días, prioriza las sesiones de carrera; la fuerza puede ir en 20 min al final de una de ellas.');
+    if (formaObj && disp.length < (+formaObj.dias_semana || 0)) notas.push(`Tu objetivo «${formaObj.objetivo}» pide ${formaObj.dias_semana} días por semana y esta semana tienes ${disp.length}. Si puedes, añade aunque sean 30 min otro día.`);
+    if (pesoObj) notas.push(`Para «${pesoObj.objetivo}»: además de los entrenos, intenta caminar 8.000–10.000 pasos al día y cuidar la alimentación.`);
+    if (volObj && volObj.km_semana_necesarios) notas.push(`Para «${volObj.objetivo}» necesitas unos ${Math.round(volObj.km_semana_necesarios)} km esta semana.`);
+
+    // reparto: larga en fin de semana, sesiones duras separadas
+    const asign = new Map();
+    const libres = new Set(dias);
+    const larga = sesiones.find((s) => s.larga);
+    if (larga) {
+      const finde = [5, 6].filter((d) => libres.has(d));
+      const d = finde.length ? finde.reduce((a, b) => ((minutosDia[b] || 60) >= (minutosDia[a] || 60) ? b : a)) : dias[dias.length - 1];
+      asign.set(d, larga); libres.delete(d);
+    }
+    const duras = sesiones.filter((s) => s.dura && s !== larga), resto = sesiones.filter((s) => !s.dura && s !== larga);
+    const distDura = (d) => { let m = 7; asign.forEach((s, k) => { if (s.dura) m = Math.min(m, Math.abs(k - d)); }); return m; };
+    duras.forEach((s) => {
+      const d = [...libres].sort((a, b) => distDura(b) - distDura(a) || a - b)[0];
+      if (d != null) { asign.set(d, s); libres.delete(d); }
+    });
+    resto.forEach((s) => { const d = [...libres].sort((a, b) => a - b)[0]; if (d != null) { asign.set(d, s); libres.delete(d); } });
+
+    if (competicion) {
+      const dc = (parse(competicion.dia) - w0) / 864e5;
+      asign.set(dc, {sport: DEPORTE_COMP[competicion.tipo] || 'run', dura: true, titulo: `Competición: ${competicion.objetivo}`, min: competicion.meta_min || 60,
+        detalle: competicion.meta_min ? `Meta: ${competicion.meta}. Sal controlado y aprieta en la segunda mitad.` : 'A disfrutar.'});
+      notas.push(`Semana de competición: ${competicion.objetivo}. Llega fresco.`);
+    }
+
+    // ajustar a los minutos disponibles de cada día
+    const out = [];
+    asign.forEach((s, d) => {
+      const cap = minutosDia[d];
+      const o = {...s, dia: iso(addDays(w0, d)), nombreDia: NOMBRE_DIA[d]};
+      if (cap && o.min > cap && !o.titulo.startsWith('Competición')) {
+        const f = cap / o.min;
+        o.min = cap;
+        if (o.km) o.km = Math.max(3, Math.round(o.km * f));
+        o.detalle += ` (Ajustado a tus ${cap} min: acórtalo proporcionalmente.)`;
+      }
+      out.push(o);
+    });
+    out.sort((a, b) => (a.dia < b.dia ? -1 : 1));
+    const kmTot = out.reduce((s, x) => s + (x.sport === 'run' && x.km ? x.km : 0), 0);
+    return {semana: semanaIso, fase: fase.titulo, faseTipo: fase.tipo, sesiones: out, kmCarrera: kmTot, notas, creado: new Date().toISOString(), disponibles: disp, minutosDia,
+      descarga: !!(plan && plan.descarga) && !competicion && !recien, competicion: competicion ? competicion.objetivo : null, recuperacion: recien ? recien.objetivo : null,
+      horas: Math.round(out.reduce((s, x) => s + (x.min || 0), 0) / 6) / 10};
+  }
+
+  // Plan completo: una propuesta por semana desde el lunes indicado hasta el último objetivo con fecha (o 12 semanas).
+  function generarCompleto(R, perfil, desdeIso, disponibles, minutosDia) {
+    const w0 = parse(desdeIso);
+    const fechas = ((R && R.objetivos) || []).filter((o) => o.dia && o.dia >= desdeIso).map((o) => o.dia).sort();
+    const ultimo = fechas.length ? parse(fechas[fechas.length - 1]) : addDays(w0, 7 * 11);
+    const semanas = [];
+    for (let w = w0, n = 1; w <= ultimo && n <= 80; w = addDays(w, 7), n++) {
+      const p = proponer(R, perfil, iso(w), disponibles, minutosDia, {futuro: true});
+      p.numero = n;
+      semanas.push(p);
+    }
+    return {creado: new Date().toISOString(), desde: desdeIso, hasta: semanas.length ? semanas[semanas.length - 1].semana : desdeIso,
+      disponibles: [...disponibles], minutosDia: {...minutosDia}, semanas};
+  }
+
+  window.PLAN = {proponer, generarCompleto, NOMBRE_DIA};
+})();

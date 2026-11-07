@@ -1,0 +1,122 @@
+{
+  "repo/setup/iconos.py": {
+    "mtime": 1794051554.1416886,
+    "seen": 1794052035.9776192,
+    "ast_hash": "7877136eb1ae61265211e30062bad9ef",
+    "semantic_hash": "7877136eb1ae61265211e30062bad9ef"
+  },
+  "repo/site/js/analysis.js": {
+    "mtime": 1794051554.104846,
+    "seen": 1794052035.9776256,
+    "ast_hash": "165131efc6aedad214cdc46882b03d85",
+    "semantic_hash": "165131efc6aedad214cdc46882b03d85"
+  },
+  "repo/site/js/app.js": {
+    "mtime": 1794051554.113459,
+    "seen": 1794052035.9776287,
+    "ast_hash": "ec41288205832bfa0be0c605e23fa07f",
+    "semantic_hash": "ec41288205832bfa0be0c605e23fa07f"
+  },
+  "repo/site/js/charts.js": {
+    "mtime": 1794051554.1228693,
+    "seen": 1794052035.977631,
+    "ast_hash": "42b3a25ad0dd1fa6826c87fa0b7afdce",
+    "semantic_hash": "42b3a25ad0dd1fa6826c87fa0b7afdce"
+  },
+  "repo/site/js/importar.js": {
+    "mtime": 1794051554.1292596,
+    "seen": 1794052035.9776328,
+    "ast_hash": "4b6afd4597fd08f0349fbc3ff55f7539",
+    "semantic_hash": "4b6afd4597fd08f0349fbc3ff55f7539"
+  },
+  "repo/site/js/planner.js": {
+    "mtime": 1794051554.1354437,
+    "seen": 1794052035.977635,
+    "ast_hash": "43ed7acb92132d514de289e53db573a3",
+    "semantic_hash": "43ed7acb92132d514de289e53db573a3"
+  },
+  "repo/site/sw.js": {
+    "mtime": 1794051554.098654,
+    "seen": 1794052035.977637,
+    "ast_hash": "98ba3df9984f32c9c5d77f67a8b56bae",
+    "semantic_hash": "98ba3df9984f32c9c5d77f67a8b56bae"
+  },
+  "setup/iconos.py": {
+    "mtime": 1794051525.9133906,
+    "seen": 1794052035.9776392,
+    "ast_hash": "7877136eb1ae61265211e30062bad9ef",
+    "semantic_hash": "7877136eb1ae61265211e30062bad9ef"
+  },
+  "site/js/analysis.js": {
+    "mtime": 1794051525.9229372,
+    "seen": 1794052035.977641,
+    "ast_hash": "165131efc6aedad214cdc46882b03d85",
+    "semantic_hash": "165131efc6aedad214cdc46882b03d85"
+  },
+  "site/js/app.js": {
+    "mtime": 1794051525.9241934,
+    "seen": 1794052035.9776433,
+    "ast_hash": "ec41288205832bfa0be0c605e23fa07f",
+    "semantic_hash": "ec41288205832bfa0be0c605e23fa07f"
+  },
+  "site/js/charts.js": {
+    "mtime": 1794051525.925669,
+    "seen": 1794052035.9776456,
+    "ast_hash": "42b3a25ad0dd1fa6826c87fa0b7afdce",
+    "semantic_hash": "42b3a25ad0dd1fa6826c87fa0b7afdce"
+  },
+  "site/js/importar.js": {
+    "mtime": 1794051525.9267933,
+    "seen": 1794052035.977648,
+    "ast_hash": "4b6afd4597fd08f0349fbc3ff55f7539",
+    "semantic_hash": "4b6afd4597fd08f0349fbc3ff55f7539"
+  },
+  "site/js/planner.js": {
+    "mtime": 1794051525.9291344,
+    "seen": 1794052035.9776502,
+    "ast_hash": "43ed7acb92132d514de289e53db573a3",
+    "semantic_hash": "43ed7acb92132d514de289e53db573a3"
+  },
+  "site/sw.js": {
+    "mtime": 1794051525.9331906,
+    "seen": 1794052035.9776523,
+    "ast_hash": "98ba3df9984f32c9c5d77f67a8b56bae",
+    "semantic_hash": "98ba3df9984f32c9c5d77f67a8b56bae"
+  },
+  ".github/workflows/actualizar.yml": {
+    "mtime": 1794051525.9083269,
+    "seen": 1794052035.9776545,
+    "ast_hash": "1fa01839c55e3ae76a80ce3f30e7905f",
+    "semantic_hash": "1fa01839c55e3ae76a80ce3f30e7905f"
+  },
+  "README.md": {
+    "mtime": 1794051525.9113936,
+    "seen": 1794052035.977657,
+    "ast_hash": "0eafa36f15b81ce39637931c95517b08",
+    "semantic_hash": "0eafa36f15b81ce39637931c95517b08"
+  },
+  "repo/.github/workflows/actualizar.yml": {
+    "mtime": 1794051554.1494572,
+    "seen": 1794052035.9776592,
+    "ast_hash": "1fa01839c55e3ae76a80ce3f30e7905f",
+    "semantic_hash": "1fa01839c55e3ae76a80ce3f30e7905f"
+  },
+  "repo/README.md": {
+    "mtime": 1794051554.0493295,
+    "seen": 1794052035.9776614,
+    "ast_hash": "0eafa36f15b81ce39637931c95517b08",
+    "semantic_hash": "0eafa36f15b81ce39637931c95517b08"
+  },
+  "repo/site/index.html": {
+    "mtime": 1794051554.0799727,
+    "seen": 1794052035.9776633,
+    "ast_hash": "1d3846f925304c18c7237cfe1298704f",
+    "semantic_hash": "1d3846f925304c18c7237cfe1298704f"
+  },
+  "site/index.html": {
+    "mtime": 1794051525.9199347,
+    "seen": 1794052035.9776647,
+    "ast_hash": "1d3846f925304c18c7237cfe1298704f",
+    "semantic_hash": "1d3846f925304c18c7237cfe1298704f"
+  }
+}

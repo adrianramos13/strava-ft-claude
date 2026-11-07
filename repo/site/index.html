@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f6f7f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121512" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Entreno">
+<title>Entreno</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="topbar-title" id="bar-title">Inicio</span>
+  <span class="topbar-sub" id="bar-sub"></span>
+</header>
+
+<main class="views">
+
+  <!-- ============================== INICIO -->
+  <section class="view" id="v-inicio" data-title="Inicio">
+    <div class="card onboard" id="onboard" hidden>
+      <h2>Empieza importando tu Strava</h2>
+      <p>En la web de Strava ve a <b>Ajustes → Mi cuenta → Descargar o eliminar tu cuenta → Solicitar tu archivo</b>. Cuando te llegue el email, descarga el zip y súbelo aquí. Todo se queda en este móvil.</p>
+      <label class="btn primary file"><input type="file" accept=".zip,.csv,application/zip,text/csv" data-import-strava hidden>Subir export de Strava</label>
+      <p class="note">También puedes empezar sin historial: añade tus objetivos en Perfil y tus entrenos con el botón +.</p>
+    </div>
+
+    <div class="banner" id="banner-domingo" hidden>
+      <div><b>Es domingo: planifica tu semana.</b><span>Dime cuántos días puedes entrenar y te propongo los entrenos.</span></div>
+      <button class="btn primary" data-goto="semana">Planificar</button>
+    </div>
+    <div class="banner warn" id="banner-import" hidden>
+      <div><b>Toca actualizar tu perfil de Strava.</b><span id="banner-import-txt"></span></div>
+      <button class="btn" data-goto="perfil">Ir a perfil</button>
+    </div>
+
+    <div id="inicio-datos" hidden>
+      <p class="lead">Estás <b id="i-estado">—</b>: frescura <b id="i-fres">—</b>, y tu carga de 28 días cambió <b id="i-cambio">—</b>.</p>
+
+      <div class="tiles">
+        <div class="tile">
+          <div class="help"><button type="button" aria-describedby="pop-forma" aria-label="Qué es la forma">?</button><div class="pop" id="pop-forma" role="tooltip"><p><strong>Forma</strong>: tu nivel de entrenamiento acumulado, la media de tu carga de las últimas 6 semanas (pesan más los días recientes).</p><p>Sube poco a poco con constancia y baja si paras. Escala orientativa: menos de 20 poca base; 20–40 recreativo regular; 40–60 amateur bien entrenado; 60–80 avanzado; más de 80 élite o mucho volumen.</p></div></div>
+          <span class="tlabel">Forma</span><span class="big" id="i-forma">—</span><div class="scale" data-escala="forma"></div>
+        </div>
+        <div class="tile">
+          <div class="help"><button type="button" aria-describedby="pop-fatiga" aria-label="Qué es la fatiga">?</button><div class="pop" id="pop-fatiga" role="tooltip"><p><strong>Fatiga</strong>: el cansancio de la última semana, la misma media pero de 7 días.</p><p>Misma escala que la forma; lo que importa es compararlas. 10–25 puntos por encima de la forma es una semana dura y productiva; más de 30, o varias semanas así, es demasiado; por debajo, estás recuperando.</p></div></div>
+          <span class="tlabel">Fatiga</span><span class="big" id="i-fatiga">—</span><div class="scale" data-escala="fatiga"></div>
+        </div>
+        <div class="tile">
+          <div class="help"><button type="button" aria-describedby="pop-fres" aria-label="Qué es la frescura">?</button><div class="pop" id="pop-fres" role="tooltip"><p><strong>Frescura</strong> = forma − fatiga: si estás descansado o cargado.</p><p>Más de +5: fresco, ideal para competir. Entre −10 y +5: equilibrado. Entre −30 y −10: cargando, normal en semanas fuertes. Menos de −30 varios días: riesgo de sobrecarga.</p></div></div>
+          <span class="tlabel">Frescura</span><span class="big" id="i-fres2">—</span><span class="chip" id="i-chip">—</span>
+        </div>
+        <div class="tile">
+          <div class="help"><button type="button" aria-describedby="pop-carga" aria-label="Qué es la carga">?</button><div class="pop" id="pop-carga" role="tooltip"><p><strong>Carga</strong>: puntos de esfuerzo de tus sesiones según duración e intensidad (Esfuerzo Relativo de Strava, tu pulso medio o, si no hay, tus sensaciones o el tipo de deporte).</p><p>Compara los últimos 28 días con los 28 anteriores. Subir más de un 10–15 % de golpe aumenta el riesgo de lesión.</p></div></div>
+          <span class="tlabel">Carga 28 días</span><span class="big" id="i-carga">—</span><span class="tnote">Antes: <span id="i-carga-p">—</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Esta semana</h2><button class="link" data-goto="semana">Ver plan</button></div>
+        <div id="i-semana"></div>
+      </div>
+
+      <div class="card" id="i-objetivo-card">
+        <div class="card-head"><h2>Tus objetivos</h2><button class="link" data-goto="progreso">Detalles</button></div>
+        <div id="i-objetivo" class="goal-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Últimos entrenos</h2><button class="link" data-goto="progreso" data-anchor="historial">Historial</button></div>
+        <ul class="list" id="i-ultimos"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== SEMANA -->
+  <section class="view" id="v-semana" data-title="Semana" hidden>
+    <div class="seg" role="tablist" id="sem-seg">
+      <button role="tab" class="on" data-sseg="semana">Esta semana</button>
+      <button role="tab" data-sseg="completo">Plan completo</button>
+    </div>
+    <div id="ss-semana" class="stack">
+      <div class="card" id="plan-form-card">
+        <h2 id="plan-form-titulo">¿Cuántos días vas a entrenar?</h2>
+        <p class="note" id="plan-form-sub">Marca los días que <b>podrías</b> entrenar y cuánto tiempo tienes cada uno. Yo decido cuántas sesiones conviene: si es mejor descansar algún día, te lo dejo libre.</p>
+        <div class="days" id="plan-dias"></div>
+        <div id="plan-minutos" class="minutos"></div>
+        <button class="btn primary wide" id="plan-crear">Proponer entrenos</button>
+      </div>
+      <div id="plan-vista"></div>
+    </div>
+    <div id="ss-completo" class="stack" hidden>
+      <div class="card" id="pc-form">
+        <h2>Plan de entrenamiento completo</h2>
+        <p class="note">Genera tu plan semana a semana, desde la semana que viene hasta tu último objetivo. Sigue el orden de las fechas: base, el bloque específico de la competición que llega antes, afinado, competición y recuperación, y después el bloque de la siguiente. Los objetivos personales se trabajan a la vez.</p>
+        <p class="note" id="pc-resumen-obj"></p>
+        <p class="note"><b>¿Qué días podrías entrenar normalmente?</b> Cada semana usaré los que convengan (menos en descargas, recuperación o semanas de competición).</p>
+        <div class="days" id="pc-dias"></div>
+        <div id="pc-minutos" class="minutos"></div>
+        <div class="row-btns"><button class="btn primary wide" id="pc-generar">Generar plan</button><button class="btn" id="pc-cancelar" hidden>Cancelar</button></div>
+      </div>
+      <div id="pc-vista" class="stack"></div>
+    </div>
+  </section>
+
+  <!-- ============================== AÑADIR -->
+  <section class="view" id="v-anadir" data-title="Añadir entreno" hidden>
+    <div class="card">
+      <h2>Nuevo entreno</h2>
+      <label class="btn primary file"><input type="file" accept=".fit,.gpx,.tcx,.gz,application/gpx+xml,application/octet-stream" id="f-archivo" multiple hidden>Subir actividades de Strava o del reloj</label>
+      <details class="how"><summary>Enviar desde la app del reloj con «Compartir»</summary>
+        <p><b>Android:</b> instala esta app (menú de Chrome → <b>Instalar app</b> o <b>Añadir a pantalla de inicio</b>). Después, en la app de Suunto (o la de tu pulsera) abre el entreno → <b>Compartir / Exportar</b> → elige <b>Entreno</b>. Se guarda solo y se actualizan las métricas.</p>
+        <p><b>iPhone:</b> Apple no deja que las apps web salgan en Compartir. Usa <b>Compartir → Guardar en Archivos</b> y luego súbelo con el botón de arriba.</p>
+        <p>La app de Strava solo comparte un enlace, sin los datos: para Strava, usa «Exportar original» en strava.com.</p>
+      </details>
+      <details class="how"><summary>¿De dónde saco el archivo?</summary>
+        <p><b>Desde Strava:</b> abre la actividad en strava.com (en el móvil, en el navegador con «Ver versión para ordenador»), menú <b>⋯</b> → <b>Exportar original</b> (.fit) o <b>Exportar GPX</b>.</p>
+        <p><b>Desde la app de Suunto o de tu pulsera:</b> en el entreno, opción de compartir o exportar como GPX/FIT.</p>
+        <p>Si subes un archivo, se rellena el formulario para que lo revises. Si subes varios, se guardan directamente.</p>
+      </details>
+      <p class="note">O rellénalo a mano:</p>
+      <form id="f-entreno" class="form">
+        <label>Deporte
+          <select id="f-sport" required>
+            <option value="run">Carrera</option><option value="strength">Fuerza</option><option value="hyrox">HYROX / funcional</option>
+            <option value="bike">Bici</option><option value="swim">Natación</option><option value="walk">Caminata</option><option value="other">Otro</option>
+          </select>
+        </label>
+        <div class="row2">
+          <label>Fecha<input type="date" id="f-fecha" required></label>
+          <label>Hora<input type="time" id="f-hora" value="18:00"></label>
+        </div>
+        <div class="row2">
+          <label>Duración (h)<input type="number" id="f-h" min="0" max="12" step="1" value="0" inputmode="numeric"></label>
+          <label>Duración (min)<input type="number" id="f-m" min="0" max="59" step="1" value="45" inputmode="numeric"></label>
+        </div>
+        <div class="row2" id="f-dist-row">
+          <label>Distancia (km)<input type="text" id="f-km" min="0" step="0.01" inputmode="decimal" placeholder="opcional"></label>
+          <label>FC media (ppm)<input type="number" id="f-fc" min="40" max="220" step="1" inputmode="numeric" placeholder="opcional"></label>
+        </div>
+        <label>Esfuerzo percibido: <b id="f-rpe-v">6</b>/10
+          <input type="range" id="f-rpe" min="1" max="10" value="6">
+          <span class="note">1 muy suave · 5 moderado · 8 duro · 10 máximo. Se usa si no pones pulso.</span>
+        </label>
+        <label>Nombre<input type="text" id="f-nombre" placeholder="Por ejemplo: Rodaje suave" maxlength="80"></label>
+        <label id="f-hevy-wrap" hidden>Series de Hevy (opcional)
+          <textarea id="f-hevy" rows="6" placeholder="En Hevy: entreno → Compartir → Copiar texto, y pégalo aquí.&#10;Ejemplo:&#10;Sentadilla (Barra)&#10;Serie 1: 60 kg x 8&#10;Serie 2: 80 kg x 5"></textarea>
+        </label>
+        <label>Notas<textarea id="f-notas" rows="2" placeholder="Cómo te has sentido, molestias…"></textarea></label>
+        <button type="submit" class="btn primary wide">Guardar entreno</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============================== PROGRESO -->
+  <section class="view" id="v-progreso" data-title="Progreso" hidden>
+    <div class="seg" role="tablist">
+      <button role="tab" class="on" data-seg="objetivos">Objetivos</button>
+      <button role="tab" data-seg="carga">Carga</button>
+      <button role="tab" data-seg="carrera">Carrera</button>
+      <button role="tab" data-seg="fuerza">Fuerza</button>
+      <button role="tab" data-seg="historial">Historial</button>
+    </div>
+    <div class="seg-view" id="s-objetivos">
+      <div id="goals" class="stack"></div>
+      <div class="card"><h2>Km de carrera por semana</h2><p class="note">Barras llenas: lo que has corrido. Huecas: el plan, con una semana de descarga cada cuatro.</p>
+        <ul class="legend"><li><i class="sw0"></i>Real</li><li><i class="sw1 hollow"></i>Plan</li></ul><div class="chart h-wk" id="g-plan"></div></div>
+      <div class="card"><h2>Plan por fases</h2><ol class="phases" id="fases"></ol></div>
+    </div>
+    <div class="seg-view" id="s-carga" hidden>
+      <div class="card"><h2>Forma, fatiga y frescura</h2><p class="note">Últimos 12 meses. La forma sube con constancia; frescura positiva antes de competir.</p><div class="chart h-pmc" id="g-pmc"></div></div>
+      <div class="card"><h2>Horas por semana</h2><ul class="legend" id="leyenda"></ul><div class="chart h-wk" id="g-semanas"></div></div>
+      <div class="card"><h2>Últimos 90 días</h2><div class="tablewrap"><table class="table" id="t-90"><thead><tr><th>Deporte</th><th class="num">Sesiones</th><th class="num">Horas</th><th class="num">Km</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+    <div class="seg-view" id="s-carrera" hidden>
+      <div class="card"><h2>Ritmo por salida</h2><p class="note">Cada punto es una carrera (tamaño = km). Arriba es más rápido; la línea es la tendencia.</p><div class="chart h-sc" id="g-ritmo"></div></div>
+      <div class="card"><h2>Eficiencia aeróbica</h2><p class="note">Metros por latido: si sube, corres más rápido con el mismo pulso.</p><div class="chart h-sc" id="g-efi"></div></div>
+      <div class="card"><h2>Mejores ritmos</h2><div class="tablewrap"><table class="table" id="t-mejores"><thead><tr><th>Distancia</th><th>Fecha</th><th class="num">Km</th><th class="num">Ritmo</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+    <div class="seg-view" id="s-fuerza" hidden>
+      <div class="card"><h2>1RM estimado</h2><p class="note">Mejor serie de cada sesión de los últimos 6 meses (fórmula de Epley). Sale de las series de Hevy que llegan en tu export de Strava o que pegas al añadir un entreno.</p>
+        <div class="mult" id="g-fuerza"></div><p class="note" id="fuerza-vacio" hidden>Aún no hay sesiones de fuerza con series.</p></div>
+    </div>
+    <div class="seg-view" id="s-historial" hidden>
+      <div class="card"><h2>Historial</h2><p class="note">Los entrenos añadidos a mano llevan la etiqueta «manual» y se pueden borrar. Al importar Strava se sustituyen por la versión de Strava si coinciden.</p><ul class="list" id="historial"></ul></div>
+    </div>
+  </section>
+
+  <!-- ============================== PERFIL -->
+  <section class="view" id="v-perfil" data-title="Perfil" hidden>
+    <div class="card">
+      <h2>Tus datos</h2>
+      <form id="f-perfil" class="form">
+        <label>Nombre<input type="text" id="p-nombre" maxlength="40" autocomplete="given-name"></label>
+        <div class="row2">
+          <label>FC máxima<input type="number" id="p-fcmax" min="120" max="230" inputmode="numeric" placeholder="auto"></label>
+          <label>FC en reposo<input type="number" id="p-fcrep" min="30" max="100" inputmode="numeric" placeholder="60"></label>
+        </div>
+        <button class="btn primary" type="submit">Guardar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Perfil de Strava</h2>
+      <p id="p-import-estado" class="note">Aún no has importado tu Strava.</p>
+      <label class="btn primary file"><input type="file" accept=".zip,.csv,application/zip,text/csv" data-import-strava hidden>Subir export de Strava (zip)</label>
+      <details class="how"><summary>¿Cómo consigo el export?</summary>
+        <p>En strava.com (también desde el navegador del móvil): <b>Ajustes → Mi cuenta → Descargar o eliminar tu cuenta → Solicitar tu archivo</b>. Strava te envía un email con el enlace; puede tardar desde minutos hasta unas horas. Descarga el zip y súbelo aquí. Hazlo una vez por semana para que todo esté preciso.</p></details>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Objetivos</h2><button class="btn small" id="obj-nuevo">Añadir</button></div>
+      <ul class="list" id="obj-lista"></ul>
+      <form id="f-obj" class="form" hidden>
+        <input type="hidden" id="o-id">
+        <label>Tipo
+          <select id="o-tipo">
+            <optgroup label="Personal">
+              <option value="forma">Estar en forma</option><option value="peso">Peso (bajar o subir)</option>
+              <option value="fuerza">Fuerza en un ejercicio</option><option value="volumen">Volumen (km acumulados)</option><option value="otro">Otro</option>
+            </optgroup>
+            <optgroup label="Competición">
+              <option value="carrera">Carrera a pie (asfalto)</option><option value="trail">Trail / montaña</option><option value="ocr">Carrera de obstáculos (OCR, Spartan…)</option>
+              <option value="hyrox">HYROX</option><option value="triatlon">Triatlón</option><option value="duatlon">Duatlón</option>
+              <option value="ciclismo">Ciclismo (marcha, gran fondo)</option><option value="aguas">Natación en aguas abiertas</option>
+            </optgroup>
+          </select>
+        </label>
+        <label>Nombre<input type="text" id="o-nombre" required maxlength="50" placeholder="Por ejemplo: Estar en forma"></label>
+
+        <label data-tipos="carrera">Distancia
+          <select id="o-dist"><option value="5">5 km</option><option value="10">10 km</option><option value="15">15 km</option><option value="21.0975">Media maratón</option><option value="30">30 km</option><option value="42.195">Maratón</option><option value="otra">Otra distancia</option></select>
+        </label>
+        <label id="o-dist-otra-wrap" hidden>Distancia (km)<input type="text" id="o-dist-otra" inputmode="decimal" placeholder="por ejemplo 8"></label>
+        <label data-tipos="triatlon">Distancia
+          <select id="o-tri"><option value="sprint">Sprint (750 m · 20 km · 5 km)</option><option value="olimpico">Olímpico (1,5 · 40 · 10)</option><option value="half">Medio Ironman 70.3 (1,9 · 90 · 21,1)</option><option value="ironman">Ironman (3,8 · 180 · 42,2)</option></select>
+        </label>
+        <label data-tipos="duatlon">Distancia
+          <select id="o-dua"><option value="sprint">Sprint (5 · 20 · 2,5 km)</option><option value="estandar">Estándar (10 · 40 · 5 km)</option></select>
+        </label>
+        <div class="row2" data-tipos="trail,ocr,ciclismo,aguas">
+          <label>Distancia (km)<input type="text" id="o-km-comp" inputmode="decimal" placeholder="por ejemplo 21"></label>
+          <label data-tipos="trail,ocr,ciclismo">Desnivel positivo (m)<input type="number" id="o-desnivel" min="0" max="15000" inputmode="numeric" placeholder="por ejemplo 1200"></label>
+        </div>
+        <div class="row2" data-tipos="carrera,trail,ocr,hyrox,triatlon,duatlon,ciclismo,aguas">
+          <label>Meta (h)<input type="number" id="o-h" min="0" max="15" inputmode="numeric" placeholder="1"></label>
+          <label>Meta (min)<input type="number" id="o-m" min="0" max="59" inputmode="numeric" placeholder="40"></label>
+        </div>
+
+        <div class="row2" data-tipos="peso">
+          <label>Peso actual (kg)<input type="text" id="o-peso-ini" min="30" max="250" step="0.1" inputmode="decimal"></label>
+          <label>Peso objetivo (kg)<input type="text" id="o-peso-obj" min="30" max="250" step="0.1" inputmode="decimal"></label>
+        </div>
+        <div class="row2" data-tipos="fuerza">
+          <label>Ejercicio<input type="text" id="o-ej" list="o-ej-lista" maxlength="60" placeholder="Sentadilla (Barra)"></label>
+          <label>1RM objetivo (kg)<input type="text" id="o-rm" min="1" max="500" step="0.5" inputmode="decimal"></label>
+        </div>
+        <datalist id="o-ej-lista"></datalist>
+        <div class="row2" data-tipos="forma">
+          <label>Días por semana<select id="o-dias"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option></select></label>
+          <label>Forma objetivo (opcional)<input type="number" id="o-forma" min="5" max="150" inputmode="numeric" placeholder="por ejemplo 45"></label>
+        </div>
+        <div class="row2" data-tipos="volumen">
+          <label>Deporte<select id="o-dep"><option value="run">Carrera</option><option value="bike">Bici</option><option value="swim">Natación</option><option value="walk">Caminata</option></select></label>
+          <label>Km objetivo<input type="number" id="o-km" min="1" max="50000" inputmode="numeric" placeholder="1000"></label>
+        </div>
+        <label data-tipos="volumen">Contar desde<input type="date" id="o-desde"></label>
+        <div data-tipos="otro" class="form">
+          <label>¿En qué se centra?<select id="o-enfoque"><option value="forma">Salud y forma general</option><option value="peso">Perder peso</option><option value="fuerza">Ganar fuerza</option><option value="base">Resistencia</option></select></label>
+          <label>Descripción<input type="text" id="o-nota" maxlength="120" placeholder="Por ejemplo: subir el Teide andando"></label>
+        </div>
+
+        <label><span id="o-dia-label">Fecha límite (opcional)</span><input type="date" id="o-dia"></label>
+        <div class="row-btns"><button class="btn primary" type="submit">Guardar objetivo</button><button class="btn" type="button" id="o-cancelar">Cancelar</button></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Recordatorio de los domingos</h2>
+      <p class="note">Una web gratuita no puede enviarte notificaciones con la app cerrada, así que el aviso fiable es un evento semanal en el calendario de tu móvil: cada domingo a la hora que elijas te salta la alarma con un enlace a la app. Además, al abrir la app un domingo te aparece el aviso para planificar.</p>
+      <div class="row2">
+        <label>Hora del aviso<input type="time" id="r-hora" value="19:00"></label>
+        <span></span>
+      </div>
+      <button class="btn primary" id="r-ics">Añadir recordatorio al calendario</button>
+      <button class="btn" id="r-notif" hidden>Probar también notificaciones del navegador</button>
+      <p class="note" id="r-notif-txt" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2>Copia de seguridad</h2>
+      <p class="note">Tus datos solo están en este dispositivo. Guarda una copia por si cambias de móvil o borras el navegador.</p>
+      <div class="row-btns">
+        <button class="btn" id="b-exportar">Descargar copia</button>
+        <label class="btn file"><input type="file" accept=".json,application/json" id="b-importar" hidden>Restaurar copia</label>
+      </div>
+      <button class="btn danger" id="b-borrar">Borrar todos mis datos</button>
+    </div>
+    <p class="note center">Entreno · tus datos no salen de este dispositivo.</p>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Secciones">
+  <button data-tab="inicio" class="on"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z"/></svg><span>Inicio</span></button>
+  <button data-tab="semana"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5"/></svg><span>Semana</span></button>
+  <button data-tab="anadir" class="fab" aria-label="Añadir entreno"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button data-tab="progreso"><svg viewBox="0 0 24 24"><path d="M4 19 10 12l4 4 6-9"/></svg><span>Progreso</span></button>
+  <button data-tab="perfil"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Perfil</span></button>
+</nav>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-t">
+    <h2 id="modal-t"></h2><p id="modal-p"></p>
+    <div class="row-btns"><button class="btn primary" id="modal-ok">Aceptar</button><button class="btn" id="modal-no">Cancelar</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/importar.js"></script>
+<script src="js/planner.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
