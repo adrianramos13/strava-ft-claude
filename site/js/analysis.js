@@ -66,6 +66,72 @@
     return out;
   }
 
+  // ------------------------------------------------------------- capacidad
+  // Lo que la persona hace ahora (últimas semanas) y sus datos físicos: de aquí sale lo personal del plan.
+  const SEMANAS_CAPACIDAD = 8;
+  // historial mínimo para proponer un plan: sin él no hay plan
+  const HISTORIAL_MIN = {actividades: 4, semanasActivas: 2};
+  const r1 = (x) => Math.round(x * 10) / 10;
+
+  function edadDe(fechaNac, hoy) {
+    if (!fechaNac) return null;
+    const n = parse(fechaNac);
+    const cumplido = hoy.getUTCMonth() > n.getUTCMonth() || (hoy.getUTCMonth() === n.getUTCMonth() && hoy.getUTCDate() >= n.getUTCDate());
+    return hoy.getUTCFullYear() - n.getUTCFullYear() - (cumplido ? 0 : 1);
+  }
+  // FC máxima estimada por edad (Tanaka et al. 2001); solo si no hay una medida
+  const fcMaxTanaka = (edad) => (edad ? Math.round(208 - 0.7 * edad) : null);
+
+  // Nivel 0–4 por sesiones/semana: <1 casi nada, <3 principiante, <5 intermedio (McKay 2022: ~3/semana = entrenado),
+  // <6 avanzado, ≥6 muy entrenado. Menos de 45 min/semana es nivel 0. Baja uno si más del 25 % de las semanas no hubo actividad.
+  const UMBRAL_NIVEL = [1, 3, 5, 6];
+  const MIN_SEMANA_NIVEL1 = 45;
+  function nivelDe(sesSemana, minSemana, semanasActivas) {
+    const n = minSemana < MIN_SEMANA_NIVEL1 ? 0 : UMBRAL_NIVEL.filter((u) => sesSemana >= u).length;
+    return semanasActivas < SEMANAS_CAPACIDAD * 0.75 ? Math.max(0, n - 1) : n;
+  }
+  // subida máxima del volumen semanal de carrera según nivel (Nielsen 2014, Damsted 2019, Frandsen 2025):
+  // principiantes en %, con un mínimo de +3 km porque a poco volumen el % no significa nada; avanzados con tope de +8 km
+  const SUBIDA = [0.2, 0.2, 0.15, 0.1, 0.1];
+  function subidaMax(prev, nivel) {
+    const inc = prev * SUBIDA[nivel];
+    return prev + (nivel <= 2 ? Math.max(inc, 3) : Math.min(Math.max(inc, 3), 8));
+  }
+
+  // acts ya normalizadas (sport, d, min, km); forma = carga crónica (CTL)
+  function capacidad(acts, perfil, hoy, forma = 0) {
+    const desde = addDays(hoy, -7 * SEMANAS_CAPACIDAD);
+    const rec = acts.filter((a) => a.d >= desde && a.d <= hoy);
+    const runs = rec.filter((a) => a.sport === 'run');
+    const semanasActivas = new Set(rec.map((a) => iso(lunes(a.d)))).size;
+    const total = {};
+    rec.forEach((a) => {
+      const p = total[a.sport] || {sesiones: 0, min: 0, km: 0, maxMin: 0, maxKm: 0};
+      total[a.sport] = {sesiones: p.sesiones + 1, min: p.min + a.min, km: p.km + a.km, maxMin: Math.max(p.maxMin, a.min), maxKm: Math.max(p.maxKm, a.km)};
+    });
+    const porDeporte = Object.fromEntries(Object.entries(total).map(([k, p]) => [k,
+      {sesiones: r1(p.sesiones / SEMANAS_CAPACIDAD), min: Math.round(p.min / SEMANAS_CAPACIDAD), km: r1(p.km / SEMANAS_CAPACIDAD), maxMin: Math.round(p.maxMin), maxKm: r1(p.maxKm)}]));
+    const edad = edadDe(perfil.fecha_nacimiento, hoy);
+    const altura = +perfil.altura_cm || null;
+    const pesos = (perfil.pesos || []).filter((p) => +p.kg).sort((a, b) => (a.dia < b.dia ? -1 : 1));
+    const peso = pesos.length ? +pesos[pesos.length - 1].kg : null;
+    const sesionesSemana = r1(rec.length / SEMANAS_CAPACIDAD);
+    const minSemana = rec.reduce((s, a) => s + a.min, 0) / SEMANAS_CAPACIDAD;
+    return {
+      suficiente: rec.length >= HISTORIAL_MIN.actividades && semanasActivas >= HISTORIAL_MIN.semanasActivas,
+      actividades: rec.length, semanasActivas, sesionesSemana,
+      horasSemana: r1(minSemana / 60),
+      nivel: nivelDe(sesionesSemana, minSemana, semanasActivas),
+      porDeporte, forma,
+      // carrera más larga de los últimos 30 días (ninguna sesión debería pasarla en más de un 10 %) y minutos corriendo sin parar
+      largo30: r1(Math.max(0, ...runs.filter((a) => a.d > addDays(hoy, -30)).map((a) => a.km))),
+      correrSeguido: Math.round(Math.max(0, ...runs.map((a) => a.min))),
+      edad, altura_cm: altura, peso_kg: peso,
+      imc: altura && peso ? r1(peso / (altura / 100) ** 2) : null,
+      fcMaxEstimada: fcMaxTanaka(edad),
+    };
+  }
+
   // -------------------------------------------------------------- análisis
   function analizar(actividades, perfil, hoy = hoyUTC()) {
     const acts = actividades.map((a) => {
@@ -78,11 +144,12 @@
     }).filter((a) => a.d <= hoy).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
     if (!acts.length) {
       const objetivos = (perfil.objetivos || []).map((o) => estimarObjetivo(o, {acts: [], hoy, perfil, sesiones: {}, ctl: 0}));
-      return {vacio: true, estado: null, objetivos, kmSemana: planKm([], objetivos, hoy), fases: planFases(objetivos, hoy), ritmo10k: null, acts: [], recientes: []};
+      return {vacio: true, estado: null, objetivos, kmSemana: planKm([], objetivos, hoy), fases: planFases(objetivos, hoy), ritmo10k: null, acts: [], recientes: [],
+        capacidad: capacidad([], perfil, hoy)};
     }
 
     const maxs = acts.map((a) => a.fc_max).filter(Boolean).sort((a, b) => a - b);
-    const fcMax = +perfil.fc_max || (maxs.length ? maxs[Math.floor(maxs.length * 0.98)] : null);
+    const fcMax = +perfil.fc_max || (maxs.length ? maxs[Math.floor(maxs.length * 0.98)] : null) || fcMaxTanaka(edadDe(perfil.fecha_nacimiento, hoy));
     const fcRep = +perfil.fc_reposo || 60;
     acts.forEach((a) => { [a.carga, a.carga_tipo] = carga(a, fcMax, fcRep); });
 
@@ -155,7 +222,8 @@
     const ritmo10k = ref10 ? riegel(ref10.min, ref10.km, 10) / 10 : null;
 
     const objetivos = (perfil.objetivos || []).map((o) => estimarObjetivo(o, {acts, hoy, perfil, sesiones, ctl}));
-    const kmSemana = planKm(acts, objetivos, hoy);
+    const cap = capacidad(acts, perfil, hoy, Math.round(ctl));
+    const kmSemana = planKm(acts, objetivos, hoy, cap);
     const fases = planFases(objetivos, hoy);
 
     const recientes = acts.slice(-20).reverse().map((a) => ({
@@ -168,6 +236,7 @@
         cobertura_fc: Math.round(acts.filter((a) => a.carga_tipo !== 'estimada').length / acts.length * 100)},
       estado, pmc, horasSemana, deportes90: resumen(90), deportes7: resumen(7), carreras, mejores, fuerza, recientes,
       objetivos, kmSemana, fases, ritmo10k, acts,
+      capacidad: cap,
       largo8: Math.max(0, ...runs.filter((a) => a.d > addDays(hoy, -56)).map((a) => a.km)),
       ejercicios: Object.keys(sesiones).sort(),
       cardioPref: (resumen(90).find((r) => ['run', 'bike', 'swim', 'walk'].includes(r.sport)) || {sport: 'run'}).sport,
@@ -336,7 +405,7 @@
         o.notas.push(`Necesitas ${dec(necesario, 2)} kg/semana para llegar a tiempo.`);
         if (falta > 0 && necesario > act * 0.01) o.notas.push('Es un ritmo muy agresivo (más del 1 % de tu peso por semana): plantéate alargar la fecha para no perder músculo.');
       }
-      if (falta > 0) o.notas.push('El plan prioriza fuerza 2–3 días para conservar músculo y cardio suave para gastar más. Lo que más pesa es la alimentación: un déficit moderado (unas 300–500 kcal al día) suele bastar. Si tienes dudas, consulta con un nutricionista.');
+      if (falta > 0) o.notas.push('El plan prioriza fuerza 2–3 días para conservar músculo y cardio suave que se va alargando.');
       o.foco = falta > 0 ? 'peso' : 'fuerza';
     } else if (o.tipo === 'fuerza') {
       const buscar = (o.ejercicio || '').toLowerCase();
@@ -390,29 +459,39 @@
     return o;
   }
 
-  function planKm(acts, objetivos, hoy) {
+  // km/semana de pico por distancia de la carrera y nivel (0–4). Maratón: Knopp 2024 (92 planes: 59 / 76 / 133 km);
+  // el resto, escalado a partir de ahí (consenso, sin fuente directa). Nunca por debajo de lo que la persona ya corre.
+  const PICO_KM = [[5, [15, 25, 35, 55, 80]], [10, [20, 30, 45, 65, 95]], [21.1, [25, 40, 55, 80, 110]], [Infinity, [30, 59, 76, 95, 133]]];
+  const DESCARGA = 0.7;  // semana de descarga al ~60–75 % del volumen
+
+  // Plan de km de carrera por semana: parte de lo que corres ahora, sube como mucho lo que permite tu nivel,
+  // descarga cada 4 semanas (cada 3 si eres principiante o tienes 50 años o más) y afina las 2 últimas.
+  function planKm(acts, objetivos, hoy, cap = {nivel: 0, edad: null}) {
     const real = new Map();
     acts.filter((a) => a.sport === 'run').forEach((a) => { const k = iso(lunes(a.d)); real.set(k, (real.get(k) || 0) + a.km); });
     const carrera = objetivos.filter((o) => ['carrera', 'trail', 'ocr'].includes(o.tipo) && parse(o.dia) > hoy).sort((a, b) => (a.dia < b.dia ? -1 : 1));
     const l0 = lunes(hoy);
     const fin = carrera.length ? lunes(parse(carrera[0].dia)) : addDays(l0, 84);
     const dist = carrera.length ? +carrera[0].distancia_km : 10;
-    const pico = dist <= 10 ? 35 : dist <= 21.1 ? 45 : 60;
     let ult4 = 0; for (let i = 1; i <= 4; i++) ult4 += real.get(iso(addDays(l0, -7 * i))) || 0;
-    const inicio = Math.max(10, Math.round(ult4 / 4));
+    const inicio = Math.round(ult4 / 4);
+    const pico = Math.max(PICO_KM.find(([d]) => dist <= d)[1][cap.nivel], inicio);
+    const ciclo = cap.nivel <= 1 || cap.edad >= 50 ? 3 : 4;
     const otros = new Set(objetivos.filter((o) => ['hyrox', 'triatlon', 'duatlon', 'ciclismo', 'aguas'].includes(o.tipo) && parse(o.dia) < fin).map((o) => iso(lunes(parse(o.dia)))));
     const semanasPlan = Math.max(1, Math.round((fin - l0) / DIA / 7));
     const construir = Math.max(1, semanasPlan - 2);
     const out = [];
+    let carga = inicio;  // última semana de carga (las descargas no cuentan para la siguiente subida)
     for (let w = addDays(l0, -7 * 25); w <= fin; w = addDays(w, 7)) {
-      let p = null;
+      let p = null, descarga = false;
       if (w >= l0) {
         const k = Math.round((w - l0) / DIA / 7);
-        if (k < construir) { p = inicio + (pico - inicio) * k / Math.max(1, construir - 1); if (k % 4 === 3) p *= 0.8; }
-        else p = pico * (k === construir ? 0.75 : 0.5);
+        if (k >= construir) p = carga * (k === construir ? 0.75 : 0.5);
+        else if (k % ciclo === ciclo - 1) { p = carga * DESCARGA; descarga = true; }
+        else { carga = k === 0 ? Math.min(pico, Math.max(inicio, 1)) : Math.min(pico, subidaMax(carga, cap.nivel)); p = carga; }
         if (otros.has(iso(w))) p *= 0.6;
       }
-      out.push({semana: iso(w), km_real: w <= hoy ? (real.get(iso(w)) || 0) : null, km_plan: p == null ? null : Math.round(p), descarga: p != null && w >= l0 && Math.round((w - l0) / DIA / 7) % 4 === 3});
+      out.push({semana: iso(w), km_real: w <= hoy ? (real.get(iso(w)) || 0) : null, km_plan: p == null ? null : Math.round(p), descarga});
     }
     return out;
   }
@@ -460,7 +539,7 @@
       const p = otros.slice().sort((a, b) => ((a.dia || '9999') < (b.dia || '9999') ? -1 : 1))[0];
       const fin = p && p.dia ? parse(p.dia) : addDays(hoy, 84);
       if (p) { const [t, x] = FOCO[p.foco] || FOCO.forma; fases.push({tipo: p.foco || 'forma', objetivo: p.id, desde: iso(hoy), hasta: iso(fin), titulo: `${t}: ${p.objetivo}`, texto: x}); }
-      else fases.push({tipo: 'base', desde: iso(hoy), hasta: iso(fin), titulo: 'Mantener y mejorar la base', texto: 'Sin objetivos a la vista: constancia, rodajes suaves, algo de intensidad y fuerza. Añade un objetivo en tu perfil para un plan a medida.'});
+      else fases.push({tipo: 'mantener', desde: iso(hoy), hasta: iso(fin), titulo: 'Mantener lo que haces', texto: 'Sin objetivos a la vista: tus mismos deportes y tu mismo volumen, sin subir la carga. Añade un objetivo en tu perfil si quieres progresar.'});
     }
     // los objetivos no competitivos se trabajan a la vez que las fases
     if (otros.length) fases.forEach((f) => { const p = otros.filter((o) => o.id !== f.objetivo).map((o) => o.objetivo); if (p.length) f.paralelo = `A la vez: ${p.join(', ')}.`; });
@@ -468,5 +547,5 @@
     return fases;
   }
 
-  window.AN = {analizar, seriesHevy, deporte, ETIQUETA, ORDEN, MES, iso, parse, addDays, lunes, hoyUTC, fechaTxt, hm, ritmo, riegel, DIA, COMPETICION};
+  window.AN = {analizar, capacidad, subidaMax, seriesHevy, deporte, ETIQUETA, ORDEN, MES, iso, parse, addDays, lunes, hoyUTC, fechaTxt, hm, ritmo, riegel, DIA, COMPETICION};
 })();

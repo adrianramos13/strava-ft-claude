@@ -125,7 +125,7 @@
       const ic = el('span', `dot sp-${s.sport}`, h ? '✓' : '');
       const body = el('div', 'ses-body');
       const top = el('div', 'ses-top');
-      top.append(el('b', null, s.titulo), el('span', 'ses-meta', `${s.nombreDia.slice(0, 3)} · ${s.min} min${s.km ? ` · ${s.km} km` : ''}`));
+      top.append(el('b', null, s.titulo), el('span', 'ses-meta', `${s.nombreDia.slice(0, 3)} · ${s.min} min${s.km ? ` · ${String(s.km).replace('.', ',')} km` : ''}`));
       body.append(top);
       if (!compacta) body.append(el('p', null, s.detalle));
       if (h) body.append(el('span', 'ses-hecho', `Hecho: ${h.nombre || ETIQUETA[h.sport || deporte(h)]}`));
@@ -357,8 +357,12 @@
 
   function pintarSemana() {
     $$('#sem-seg button').forEach((b) => { b.classList.toggle('on', b.dataset.sseg === segSem); b.setAttribute('aria-selected', b.dataset.sseg === segSem); });
-    $('#ss-semana').hidden = segSem !== 'semana';
-    $('#ss-completo').hidden = segSem !== 'completo';
+    // sin historial no hay plan: no sabemos de dónde parte la persona
+    const sinHistorial = !window.PLAN.puedePlanificar(R);
+    $('#sin-historial').hidden = !sinHistorial;
+    $('#ss-semana').hidden = sinHistorial || segSem !== 'semana';
+    $('#ss-completo').hidden = sinHistorial || segSem !== 'completo';
+    if (sinHistorial) return;
     if (segSem === 'completo') { pintarCompleto(); return; }
     const w = semanaObjetivo(), wIso = iso(w);
     const plan = ST.planes[wIso];
@@ -550,6 +554,8 @@
     $('#p-nombre').value = ST.perfil.nombre || '';
     $('#p-fcmax').value = ST.perfil.fc_max || ''; $('#p-fcmax').placeholder = R && R.meta && R.meta.fc_max ? `auto: ${Math.round(R.meta.fc_max)}` : 'auto';
     $('#p-fcrep').value = ST.perfil.fc_reposo || '';
+    $('#p-nac').value = ST.perfil.fecha_nacimiento || ''; $('#p-nac').max = iso(hoy());
+    $('#p-altura').value = ST.perfil.altura_cm || '';
     const ult = ST.ajustes.ultimaImportacion;
     $('#p-import-estado').textContent = ult
       ? `Última importación: ${fechaTxt(new Date(ult.fecha))} (${nf(ult.n)} actividades). ${Math.floor((Date.now() - new Date(ult.fecha)) / 864e5) >= 7 ? 'Toca actualizar.' : 'Al día.'}`
@@ -579,6 +585,9 @@
     ST.perfil.nombre = $('#p-nombre').value.trim();
     ST.perfil.fc_max = +$('#p-fcmax').value || null;
     ST.perfil.fc_reposo = +$('#p-fcrep').value || null;
+    const nac = $('#p-nac').value, alt = +$('#p-altura').value;
+    ST.perfil.fecha_nacimiento = /^\d{4}-\d{2}-\d{2}$/.test(nac) && nac <= iso(hoy()) ? nac : null;
+    ST.perfil.altura_cm = alt >= 100 && alt <= 230 ? alt : null;
     await guardar('perfil'); recalcular(); toast('Perfil guardado');
   });
 

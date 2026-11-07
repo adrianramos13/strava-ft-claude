@@ -91,6 +91,7 @@
       <button role="tab" class="on" data-sseg="semana">Esta semana</button>
       <button role="tab" data-sseg="completo">Plan completo</button>
     </div>
+    <p class="callout" id="sin-historial" hidden>Para crear tu plan necesito saber de dónde partes. Importa tu Strava (en Perfil) o registra al menos 4 entrenos en 2 semanas distintas con el botón +.</p>
     <div id="ss-semana" class="stack">
       <div class="card" id="plan-form-card">
         <h2 id="plan-form-titulo">¿Cuántos días vas a entrenar?</h2>
@@ -208,6 +209,11 @@
           <label>FC máxima<input type="number" id="p-fcmax" min="120" max="230" inputmode="numeric" placeholder="auto"></label>
           <label>FC en reposo<input type="number" id="p-fcrep" min="30" max="100" inputmode="numeric" placeholder="60"></label>
         </div>
+        <div class="row2">
+          <label>Fecha de nacimiento<input type="date" id="p-nac" min="1920-01-01"></label>
+          <label>Altura (cm)<input type="number" id="p-altura" min="100" max="230" inputmode="numeric"></label>
+        </div>
+        <p class="note">La edad y la altura (con tu último peso) ajustan la recuperación y el impacto de tu plan. Se guardan solo en este móvil.</p>
         <button class="btn primary" type="submit">Guardar</button>
       </form>
     </div>
