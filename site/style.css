@@ -236,3 +236,29 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .peso-form { display: flex; gap: 8px; }
 .peso-form input { flex: 1; min-width: 0; font-size: 1rem; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
 .phases .what em { font-style: normal; color: var(--accent); font-size: .8rem; }
+
+/* asistente: botón flotante abajo a la derecha y ventana de chat */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.asis-btn { position: fixed; z-index: 40; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(var(--tabs-h) + 16px + env(safe-area-inset-bottom, 0px));
+  width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent); cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 6px 18px rgb(0 0 0 / .22); }
+.asis-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.asis-btn[aria-expanded="true"] { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.asis-panel { position: fixed; z-index: 41; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(var(--tabs-h) + 80px + env(safe-area-inset-bottom, 0px));
+  width: min(380px, calc(100vw - 32px)); max-height: min(560px, calc(100dvh - var(--tabs-h) - 120px)); display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
+.asis-panel[hidden], .asis-body[hidden] { display: none; }
+.asis-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.asis-head h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; }
+.asis-body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; min-height: 0; flex: 1; }
+.asis-log { flex: 1; min-height: 80px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.asis-msg { max-width: 88%; padding: 8px 11px; border-radius: 12px; white-space: pre-wrap; font-size: .9rem; line-height: 1.4; }
+.asis-msg.yo { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
+.asis-msg.ia { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+.asis-msg.espera { color: var(--muted); font-style: italic; }
+.asis-msg.error, .asis-err { color: var(--bad); }
+.asis-sug { display: flex; flex-wrap: wrap; gap: 6px; }
+.asis-sug .chip { background: none; color: var(--accent); cursor: pointer; white-space: normal; text-align: left; padding: 3px 10px; }
+.asis-form { display: flex; gap: 8px; align-items: flex-end; }
+.asis-form textarea, .asis-form input { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: none; }
+.asis-pie { display: flex; justify-content: space-between; gap: 6px; font-size: .8rem; }

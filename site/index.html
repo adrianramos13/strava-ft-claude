@@ -314,7 +314,7 @@
       </div>
       <button class="btn danger" id="b-borrar">Borrar todos mis datos</button>
     </div>
-    <p class="note center">Entreno · tus datos no salen de este dispositivo.</p>
+    <p class="note center">Entreno · tus datos no salen de este dispositivo, salvo lo que envíes al asistente.</p>
   </section>
 </main>
 
@@ -334,6 +334,37 @@
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 
+<button class="asis-btn" id="asis-btn" aria-label="Asistente: pide cambios en tu plan" aria-expanded="false" aria-controls="asis-panel">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8M8 13h5"/></svg>
+</button>
+<section class="asis-panel" id="asis-panel" role="dialog" aria-labelledby="asis-t" hidden>
+  <header class="asis-head"><h2 id="asis-t">Asistente</h2><button class="link" id="asis-cerrar" aria-label="Cerrar asistente">✕</button></header>
+  <div id="asis-clave" class="asis-body" hidden>
+    <p class="note">El asistente usa Claude con <b>tu propia clave de API</b> de Anthropic (consíguela en console.anthropic.com). Cada mensaje cuesta unos céntimos y se cobra en tu cuenta.</p>
+    <p class="note">Al usarlo, tu plan, tus objetivos y un resumen de tu historial se envían a Anthropic. La clave se guarda solo en este dispositivo y no va en las copias de seguridad.</p>
+    <form id="asis-clave-form" class="asis-form">
+      <label class="sr" for="asis-clave-in">Clave de API</label>
+      <input id="asis-clave-in" type="password" autocomplete="off" placeholder="sk-ant-…">
+      <button class="btn primary">Guardar</button>
+    </form>
+    <p class="note asis-err" id="asis-clave-err" hidden>Eso no parece una clave de Anthropic (empieza por «sk-ant-»).</p>
+  </div>
+  <div id="asis-chat" class="asis-body" hidden>
+    <div class="asis-log" id="asis-log" aria-live="polite"></div>
+    <div class="asis-sug" id="asis-sug">
+      <button type="button" class="chip">No me gusta esta semana, rehazla</button>
+      <button type="button" class="chip">No quiero hacer pierna antes de la tirada larga</button>
+      <button type="button" class="chip">Estoy cansado, baja la carga esta semana</button>
+    </div>
+    <form id="asis-form" class="asis-form">
+      <label class="sr" for="asis-txt">Mensaje</label>
+      <textarea id="asis-txt" rows="2" placeholder="Ej.: el jueves no puedo, muévelo"></textarea>
+      <button class="btn primary">Enviar</button>
+    </form>
+    <div class="asis-pie"><button class="link" id="asis-deshacer">Deshacer</button><button class="link" id="asis-nueva">Nueva conversación</button><button class="link" id="asis-olvidar">Cambiar clave</button></div>
+  </div>
+</section>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="js/analysis.js"></script>
@@ -341,5 +372,6 @@
 <script src="js/planner.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
+<script src="js/asistente.js"></script>
 </body>
 </html>

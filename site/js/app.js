@@ -773,5 +773,5 @@
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   })();
 
-  window.APP = {ST, get R() { return R; }, recalcular, guardar, ir};
+  window.APP = {ST, DB, get R() { return R; }, recalcular, guardar, ir, pintar, semanaObjetivo};
 })();

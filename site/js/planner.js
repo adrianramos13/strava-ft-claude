@@ -129,7 +129,7 @@
     const o = objetivosSemana(R, semanaIso);
     const c = {...o, ...personal(R, semanaIso, opts, o.mantener)};
     const v = volumenSemana(R, c, opts);
-    return {...c, ...v, ...largoYProgreso(R, c, v.km, v.maxPlan), z: ritmos(R, c.carrera)};
+    return {...c, ...v, ...largoYProgreso(R, c, v.km, v.maxPlan), z: ritmos(R, c.carrera), diaLarga: opts.diaLarga};
   }
 
   // ------------------------------------------------------------------ catálogo de sesiones
@@ -451,7 +451,7 @@
     const larga = sesiones.find((s) => s.larga);
     if (larga) {
       const finde = [5, 6].filter((d) => libres.has(d));
-      const d = finde.length ? mejorDia(finde, minutosDia) : dias[dias.length - 1];
+      const d = libres.has(c.diaLarga) ? c.diaLarga : finde.length ? mejorDia(finde, minutosDia) : dias[dias.length - 1];
       asign.set(d, larga); libres.delete(d);
     }
     const duras = sesiones.filter((s) => s.dura && s !== larga), resto = sesiones.filter((s) => !s.dura && s !== larga);
@@ -518,6 +518,21 @@
     return out.sort((a, b) => (a.dia < b.dia ? -1 : 1));
   }
 
+  // la víspera de la tirada larga, nada de pierna: llegaría con las piernas cargadas. Esa fuerza pasa a tren superior.
+  const PIERNA = /pierna|sentadilla|zancada/i;
+  function sinPiernaAntesDeLarga(asign, S) {
+    const dLarga = [...asign.keys()].find((d) => asign.get(d).larga);
+    const previa = dLarga != null && asign.get(dLarga - 1);
+    if (!previa || previa.sport !== 'strength' || !PIERNA.test(`${previa.titulo} ${previa.detalle}`)) return asign;
+    return new Map([...asign].map(([d, s]) => [d, d === dLarga - 1 ? S.fuerza(2) : s]));
+  }
+
+  // más o menos carga que la prevista (lo pide la persona): escala minutos y km de todo menos la competición
+  function escalarCarga(sesiones, f) {
+    if (!f || f === 1) return sesiones;
+    return sesiones.map((s) => (s.titulo.startsWith('Competición') ? s : {...s, min: Math.max(10, Math.round(s.min * f)), ...(s.km ? {km: r1(s.km * f)} : {})}));
+  }
+
   // ------------------------------------------------------------------ API
   // sin historial reciente suficiente no hay plan: no sabemos de dónde parte la persona
   const puedePlanificar = (R) => !!(R && R.capacidad && R.capacidad.suficiente);
@@ -533,16 +548,17 @@
     const {n, motivo} = numSesiones(R, c, disp.length, opts);
     const dias = elegirDias(disp, n, minutosDia);
     const sesiones = asegurarFuerza(seleccionar(prioridad, dias.length, S, c), c, S);
-    const asign = asignarDias(sesiones, dias, minutosDia, c, (s) => facil(s.sport, S, sesiones));
+    const asign = sinPiernaAntesDeLarga(asignarDias(sesiones, dias, minutosDia, c, (s) => facil(s.sport, S, sesiones)), S);
     const conKms = repartirKm([...asign.values()], c, S);
     const final = new Map([...asign.keys()].map((d, i) => [d, conKms[i]]));
     if (c.competicion) final.set((parse(c.competicion.dia) - c.w0) / 864e5, sesionCompeticion(c.competicion));
-    const out = ajustarMinutos(final, minutosDia, c.w0);
+    const out = escalarCarga(ajustarMinutos(final, minutosDia, c.w0), opts.factorCarga);
     const notas = [
       ...(n < disp.length ? [`Tienes ${disp.length} días disponibles y te propongo ${n} sesiones${motivo.length ? ` porque ${motivo.join(' y ')}` : ': es lo que mejor encaja con tu fase'}. Los demás días, descanso o un paseo.`] : []),
       ...c.notasVolumen,
       ...notasFinales(c, disp, conKms, dias),
       ...(c.competicion ? [`Semana de competición: ${c.competicion.objetivo}. Llega fresco.`] : []),
+      ...(opts.factorCarga && opts.factorCarga !== 1 ? [`Carga ajustada a petición tuya: ${opts.factorCarga < 1 ? 'un' : 'hasta un'} ${Math.round(Math.abs(1 - opts.factorCarga) * 100)} % ${opts.factorCarga < 1 ? 'menos' : 'más'} de lo previsto.`] : []),
     ];
     const kmTot = r1(out.reduce((s, x) => s + (x.sport === 'run' && x.km ? x.km : 0), 0));
     return {semana: semanaIso, fase: c.fase.titulo, faseTipo: c.fase.tipo, nivel: c.nivel, sesiones: out, kmCarrera: kmTot, notas, creado: new Date().toISOString(), disponibles: disp, minutosDia,
@@ -552,7 +568,8 @@
 
   // Plan completo: una propuesta por semana desde el lunes indicado hasta el último objetivo con fecha (o 12 semanas).
   // Cada semana parte de lo planificado antes: la carrera más larga de los 30 días previos y los km de la última semana de carga.
-  function generarCompleto(R, perfil, desdeIso, disponibles, minutosDia) {
+  // extra: opciones que se aplican a todas las semanas (diaLarga, factorCarga)
+  function generarCompleto(R, perfil, desdeIso, disponibles, minutosDia, extra = {}) {
     if (!puedePlanificar(R)) return null;
     const w0 = parse(desdeIso);
     const fechas = (R.objetivos || []).filter((o) => o.dia && o.dia >= desdeIso).map((o) => o.dia).sort();
@@ -563,7 +580,7 @@
     for (let w = w0, n = 1; w <= ultimo && n <= 80; w = addDays(w, 7), n++) {
       const wIso = iso(w), desde = iso(addDays(w, -30));
       const largo30 = Math.max(0, ...corridas.filter((x) => x.dia >= desde && x.dia < wIso).map((x) => x.km));
-      const p = proponer(R, perfil, wIso, disponibles, minutosDia, {futuro: true, semanaPlan: n - 1, largo30, kmPrevio});
+      const p = proponer(R, perfil, wIso, disponibles, minutosDia, {...extra, futuro: true, semanaPlan: n - 1, largo30, kmPrevio});
       p.numero = n;
       p.sesiones.filter(esCarrera).forEach((s) => corridas.push({dia: s.dia, km: s.km}));
       p.sesiones.filter((s) => s.correrAndar).forEach((s) => corridas.push({dia: s.dia, km: s.km}));

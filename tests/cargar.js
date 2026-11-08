@@ -5,6 +5,6 @@ const vm = require('node:vm');
 
 module.exports = function cargar() {
   const ctx = vm.createContext({window: {}});
-  for (const f of ['analysis.js', 'planner.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../site/js', f), 'utf8'), ctx, {filename: f});
+  for (const f of ['analysis.js', 'planner.js', 'asistente.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../site/js', f), 'utf8'), ctx, {filename: f});
   return ctx.window;
 };
