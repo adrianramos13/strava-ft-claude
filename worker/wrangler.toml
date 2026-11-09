@@ -1,0 +1,22 @@
+# Puente del asistente (Cloudflare Workers, plan gratuito) con Gemini (nivel gratuito). Desde esta carpeta:
+#   npx wrangler login
+#   npx wrangler secret put GEMINI_API_KEY        (pega tu clave gratuita de aistudio.google.com → Get API key)
+#   npx wrangler deploy                           (imprime la URL https://entreno-asistente.<tu-subdominio>.workers.dev)
+# No actives la facturación en ese proyecto de Google: así nunca puede cobrar, como mucho se agota el cupo del día.
+name = "entreno-asistente"
+main = "asistente.mjs"
+compatibility_date = "2026-10-01"
+
+[vars]
+ORIGENES = "https://adrianramos13.github.io,http://localhost:8765"
+# modelo gratuito; si Google lo retira, cámbialo por otro de aistudio.google.com/rate-limit y vuelve a desplegar
+MODELO = "gemini-3.8-flash"
+
+# 10 mensajes por minuto e IP
+[[ratelimits]]
+name = "LIMITE"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60

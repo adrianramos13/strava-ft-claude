@@ -1,10 +1,10 @@
-/* Asistente: le escribes qué no te gusta del plan y Claude lo cambia con estas herramientas.
+/* Asistente: le escribes qué no te gusta del plan y el modelo (Gemini, nivel gratuito) lo cambia con estas herramientas.
    Las herramientas son puras (estado → estado nuevo) y se prueban en Node; el bucle con la API y la ventana solo corren en el navegador. */
 (() => {
   const {iso, parse, addDays, lunes, ETIQUETA} = window.AN;
   const {NOMBRE_DIA} = window.PLAN;
-  const MODELO = 'claude-opus-5-5';
-  const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.3.0/+esm';
+  // Puente con la clave gratuita del dueño (carpeta worker/, se publica con `npx wrangler deploy`). Vacío = asistente desactivado.
+  const ASISTENTE_URL = '';
   const MAX_VUELTAS = 10;   // llamadas a la API por mensaje: corta bucles de herramientas sin fin
   const MAX_PREFS = 20;
 
@@ -30,29 +30,29 @@ Reglas de seguridad que mantienes aunque te pidan otra cosa (explica por qué si
 
 Convenciones: días 0 = lunes … 6 = domingo; las semanas se nombran por su lunes en formato AAAA-MM-DD.`;
 
-  const nul = (t) => ({type: [t, 'null']});
-  const DIAS_SCHEMA = {type: ['array', 'null'], items: {type: 'integer'}, description: 'Días disponibles (0 = lunes … 6 = domingo). null = los mismos que ahora.'};
-  const MIN_SCHEMA = {type: ['array', 'null'], description: 'Minutos disponibles por día. null = los mismos que ahora.',
-    items: {type: 'object', properties: {dia: {type: 'integer'}, min: {type: 'integer'}}, required: ['dia', 'min'], additionalProperties: false}};
-  const LARGA_SCHEMA = {...nul('integer'), description: 'Día de la tirada larga o sesión larga (0–6). null = lo decide el plan.'};
-  const CARGA_SCHEMA = {...nul('number'), description: 'Multiplica minutos y km: 0.5–1.3 (0.8 = un 20 % menos). null = la prevista.'};
-  const herramienta = (name, description, properties) => ({name, description, strict: true,
-    input_schema: {type: 'object', properties, required: Object.keys(properties), additionalProperties: false}});
+  // formato de herramientas compatible con OpenAI (lo acepta Gemini); los campos opcionales se omiten en vez de ir a null
+  const DIAS_SCHEMA = {type: 'array', items: {type: 'integer'}, description: 'Días disponibles (0 = lunes … 6 = domingo). Omítelo para dejar los de ahora.'};
+  const MIN_SCHEMA = {type: 'array', description: 'Minutos disponibles por día. Omítelo para dejar los de ahora.',
+    items: {type: 'object', properties: {dia: {type: 'integer'}, min: {type: 'integer'}}, required: ['dia', 'min']}};
+  const LARGA_SCHEMA = {type: 'integer', description: 'Día de la tirada larga o sesión larga (0–6). Omítelo para que lo decida el plan.'};
+  const CARGA_SCHEMA = {type: 'number', description: 'Multiplica minutos y km: 0.5–1.3 (0.8 = un 20 % menos). Omítelo para la carga prevista.'};
+  const herramienta = (name, description, properties, required = []) => ({type: 'function',
+    function: {name, description, parameters: {type: 'object', properties, required}}});
 
   const HERRAMIENTAS = [
     herramienta('rehacer_semana', 'Vuelve a generar una semana con el planificador de la app (respeta fase, objetivos, nivel y progresión segura) aplicando los cambios pedidos. Sirve para la semana que toca planificar o cualquier semana del plan completo.',
-      {semana: {type: 'string', description: 'Lunes de la semana, AAAA-MM-DD.'}, dias: DIAS_SCHEMA, minutos: MIN_SCHEMA, dia_larga: LARGA_SCHEMA, factor_carga: CARGA_SCHEMA}),
+      {semana: {type: 'string', description: 'Lunes de la semana, AAAA-MM-DD.'}, dias: DIAS_SCHEMA, minutos: MIN_SCHEMA, dia_larga: LARGA_SCHEMA, factor_carga: CARGA_SCHEMA}, ['semana']),
     herramienta('rehacer_plan_completo', 'Vuelve a generar el plan completo (todas las semanas hasta el último objetivo) aplicando los cambios a todas las semanas. Si no existe, lo crea desde el lunes que viene.',
       {dias: DIAS_SCHEMA, minutos: MIN_SCHEMA, dia_larga: LARGA_SCHEMA, factor_carga: CARGA_SCHEMA}),
     herramienta('editar_sesion', 'Cambio puntual en una semana ya planificada: quitar la sesión de un día, moverla a otro día (si el destino tiene sesión, se intercambian) o poner una sesión escrita por ti en un día (sustituye lo que hubiera).',
       {semana: {type: 'string', description: 'Lunes de la semana, AAAA-MM-DD.'}, dia: {type: 'integer', description: 'Día afectado (0–6).'},
-        accion: {type: 'string', enum: ['quitar', 'mover', 'poner']}, a_dia: {...nul('integer'), description: 'Solo para mover: día de destino.'},
-        sesion: {type: ['object', 'null'], description: 'Solo para poner: la sesión nueva.', additionalProperties: false, required: ['sport', 'titulo', 'detalle', 'min', 'km'],
+        accion: {type: 'string', enum: ['quitar', 'mover', 'poner']}, a_dia: {type: 'integer', description: 'Solo para mover: día de destino.'},
+        sesion: {type: 'object', description: 'Solo para poner: la sesión nueva.', required: ['sport', 'titulo', 'detalle', 'min'],
           properties: {sport: {type: 'string', enum: Object.keys(ETIQUETA)}, titulo: {type: 'string'}, detalle: {type: 'string', description: 'Qué hacer exactamente, con ritmos o intensidad.'},
-            min: {type: 'integer'}, km: {...nul('number'), description: 'Solo si es carrera, bici o caminata con distancia.'}}}}),
-    herramienta('ver_semana', 'Devuelve el detalle completo de una semana (planificada o del plan completo).', {semana: {type: 'string', description: 'Lunes de la semana, AAAA-MM-DD.'}}),
-    herramienta('guardar_preferencia', 'Guarda una preferencia permanente de la persona (p. ej. «nunca fuerza de pierna antes de la tirada larga») para tenerla en cuenta en adelante.', {texto: {type: 'string'}}),
-    herramienta('borrar_preferencia', 'Borra una preferencia guardada por su número (1 = la primera).', {indice: {type: 'integer'}}),
+            min: {type: 'integer'}, km: {type: 'number', description: 'Solo si es carrera, bici o caminata con distancia.'}}}}, ['semana', 'dia', 'accion']),
+    herramienta('ver_semana', 'Devuelve el detalle completo de una semana (planificada o del plan completo).', {semana: {type: 'string', description: 'Lunes de la semana, AAAA-MM-DD.'}}, ['semana']),
+    herramienta('guardar_preferencia', 'Guarda una preferencia permanente de la persona (p. ej. «nunca fuerza de pierna antes de la tirada larga») para tenerla en cuenta en adelante.', {texto: {type: 'string'}}, ['texto']),
+    herramienta('borrar_preferencia', 'Borra una preferencia guardada por su número (1 = la primera).', {indice: {type: 'integer'}}, ['indice']),
     herramienta('deshacer', 'Deshace el último cambio hecho por el asistente.', {}),
   ];
 
@@ -174,7 +174,7 @@ Convenciones: días 0 = lunes … 6 = domingo; las semanas se nombran por su lun
     }
   }
 
-  // ------------------------------------------------------------ estado en texto para Claude
+  // ------------------------------------------------------------ estado en texto para el modelo
   const semanasConocidas = (est) => [...new Set([...Object.keys(est.planes).filter((s) => s >= iso(addDays(lunes(parse(est.hoy)), -7))),
     ...(est.planCompleto ? est.planCompleto.semanas.map((s) => s.semana) : [])])].sort();
 
@@ -207,53 +207,53 @@ Convenciones: días 0 = lunes … 6 = domingo; las semanas se nombran por su lun
   }
 
   // ------------------------------------------------------------ bucle con la API (navegador)
-  let sdk = null;
-  async function cargarSdk() {
-    if (!sdk) sdk = (await import(SDK_URL)).default;
-    return sdk;
+  class ErrorAsistente extends Error { constructor(status, message) { super(message); this.status = status; } }
+
+  async function pedir(url, body) {
+    let r;
+    try {
+      r = await window.fetch(url, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)});
+    } catch (err) { throw new ErrorAsistente(0, 'sin conexión'); }
+    const datos = await r.json().catch(() => null);
+    const errorApi = datos && (datos.error || (datos[0] && datos[0].error));  // Gemini a veces envuelve el error en una lista
+    if (!r.ok) throw new ErrorAsistente(r.status, (errorApi && errorApi.message) || `HTTP ${r.status}`);
+    const m = datos && datos.choices && datos.choices[0] && datos.choices[0].message;
+    if (!m) throw new ErrorAsistente(502, 'Respuesta vacía del modelo.');
+    return m;
   }
 
-  // Envía la conversación y ejecuta las herramientas que pida Claude hasta que responda con texto.
+  // Envía la conversación (formato OpenAI, que acepta Gemini) y ejecuta las herramientas que pida el modelo hasta que responda con texto.
   // historial termina en el mensaje de la persona; alCambiar recibe cada estado nuevo para guardarlo y repintar.
-  async function conversar(clave, historial, est, alCambiar) {
-    const Anthropic = await cargarSdk();
-    const client = new Anthropic({apiKey: clave, dangerouslyAllowBrowser: true});
+  async function conversar(historial, est, alCambiar, url = ASISTENTE_URL) {
     let msgs = historial, e = est;
     for (let v = 0; v < MAX_VUELTAS; v++) {
-      const r = await client.beta.messages.create({
-        model: MODELO, max_tokens: 16000, output_config: {effort: 'medium'},
-        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
-        system: [{type: 'text', text: SISTEMA, cache_control: {type: 'ephemeral'}}],
-        tools: HERRAMIENTAS, messages: msgs,
-      });
-      msgs = [...msgs, {role: 'assistant', content: r.content}];
-      const texto = r.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-      if (r.stop_reason === 'refusal') return {historial: msgs, est: e, texto: 'No puedo ayudarte con eso.'};
-      if (r.stop_reason === 'pause_turn') continue;
-      const usos = r.content.filter((b) => b.type === 'tool_use');
-      if (r.stop_reason !== 'tool_use' || !usos.length) return {historial: msgs, est: e, texto: texto || 'Hecho.'};
+      const m = await pedir(url, {messages: [{role: 'system', content: SISTEMA}, ...msgs], tools: HERRAMIENTAS});
+      msgs = [...msgs, m];  // tal cual: Gemini necesita recibir de vuelta sus firmas de razonamiento (extra_content)
+      const llamadas = m.tool_calls || [];
+      if (!llamadas.length) return {historial: msgs, est: e, texto: (typeof m.content === 'string' && m.content.trim()) || 'Hecho.'};
       const antes = e;
-      const resultados = usos.map((u) => {
-        const x = ejecutar(u.name, u.input, e);
+      const resultados = llamadas.map((c) => {
+        const base = {role: 'tool', tool_call_id: c.id, name: c.function.name};
+        let input;
+        try { input = JSON.parse(c.function.arguments || '{}'); } catch (err) { return {...base, content: 'ERROR: argumentos JSON no válidos.'}; }
+        const x = ejecutar(c.function.name, input, e);
         e = x.est;
-        return {type: 'tool_result', tool_use_id: u.id, content: x.texto, ...(x.ok ? {} : {is_error: true})};
+        return {...base, content: x.ok ? x.texto : `ERROR: ${x.texto}`};
       });
-      msgs = [...msgs, {role: 'user', content: resultados}];
+      msgs = [...msgs, ...resultados];
       if (e !== antes) await alCambiar(e);
     }
     return {historial: msgs, est: e, texto: 'He hecho varios cambios seguidos y paro aquí. Revisa el plan y dime si quieres algo más.'};
   }
 
   function mensajeError(err) {
-    const A = sdk;
-    if (!A) return 'No he podido cargar el asistente. ¿Tienes conexión?';
-    if (err instanceof A.AuthenticationError) return 'La clave de API no es válida. Revísala en «Cambiar clave».';
-    if (err instanceof A.PermissionDeniedError) return 'Tu clave no tiene permiso para usar este modelo.';
-    if (err instanceof A.RateLimitError) return 'Demasiadas peticiones seguidas. Espera un minuto y vuelve a intentarlo.';
-    if (err instanceof A.APIConnectionError) return 'No hay conexión con Claude. Inténtalo cuando tengas internet.';
-    if (err instanceof A.InternalServerError) return 'Claude está saturado ahora mismo. Prueba en un rato.';
-    if (err instanceof A.APIError) return `Claude ha devuelto un error (${err.status || '?'}): ${err.message}`;
-    return `Algo ha fallado: ${err && err.message ? err.message : err}`;
+    const s = err && err.status;
+    if (s === 0) return 'No hay conexión con el asistente. Inténtalo cuando tengas internet.';
+    if (s === 429) return 'Se ha agotado el cupo gratuito por ahora (o vas muy rápido). Prueba en un rato.';
+    if (s === 403) return 'El asistente no está disponible desde esta dirección.';
+    if (s === 401 || s === 500) return 'El asistente no está bien configurado ahora mismo. Prueba más tarde.';
+    if (s > 500) return 'El asistente está saturado ahora mismo. Prueba en un rato.';
+    return `Algo ha fallado${s ? ` (${s})` : ''}: ${err && err.message ? err.message : err}`;
   }
 
   window.ASIS = {HERRAMIENTAS, SISTEMA, ejecutar, contexto, conversar};
@@ -264,8 +264,8 @@ Convenciones: días 0 = lunes … 6 = domingo; las semanas se nombran por su lun
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
   const btn = $('#asis-btn'), panel = $('#asis-panel'), log = $('#asis-log'), form = $('#asis-form'), txt = $('#asis-txt');
-  const claveBox = $('#asis-clave'), chat = $('#asis-chat'), claveIn = $('#asis-clave-in');
-  let historial = [], pila = [], clave = null, ocupado = false;
+  const chat = $('#asis-chat'), apagado = $('#asis-off');
+  let historial = [], pila = [], ocupado = false;
 
   const estado = () => ({R: APP.R, perfil: APP.ST.perfil, hoy: iso(window.AN.hoyUTC()), semanaObjetivo: iso(APP.semanaObjetivo()),
     planes: APP.ST.planes, planCompleto: APP.ST.ajustes.planCompleto || null, preferencias: APP.ST.ajustes.preferencias || [], pila,
@@ -280,31 +280,23 @@ Convenciones: días 0 = lunes … 6 = domingo; las semanas se nombran por su lun
   }
 
   const burbuja = (cls, texto) => { const b = el('div', `asis-msg ${cls}`, texto); log.append(b); log.scrollTop = log.scrollHeight; return b; };
-  const vistaClave = (ver) => { claveBox.hidden = !ver; chat.hidden = ver; (ver ? claveIn : txt).focus(); };
   function abrir(si) {
     panel.hidden = !si; btn.setAttribute('aria-expanded', String(si));
-    if (si) vistaClave(!clave); else btn.focus();
+    if (!si) { btn.focus(); return; }
+    apagado.hidden = !!ASISTENTE_URL; chat.hidden = !ASISTENTE_URL;
+    if (ASISTENTE_URL) txt.focus();
   }
 
   btn.addEventListener('click', () => abrir(panel.hidden));
   $('#asis-cerrar').addEventListener('click', () => abrir(false));
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !panel.hidden) abrir(false); });
 
-  $('#asis-clave-form').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const k = claveIn.value.trim();
-    if (!/^sk-ant-[\w-]{20,}$/.test(k)) { $('#asis-clave-err').hidden = false; return; }
-    clave = k; claveIn.value = ''; $('#asis-clave-err').hidden = true;
-    await APP.DB.set('claveIA', k);
-    vistaClave(false);
-  });
-  $('#asis-olvidar').addEventListener('click', async () => { clave = null; await APP.DB.set('claveIA', null); vistaClave(true); });
   $('#asis-nueva').addEventListener('click', () => { historial = []; log.replaceChildren(); txt.focus(); });
   $('#asis-deshacer').addEventListener('click', async () => {
     const r = ejecutar('deshacer', {}, estado());
     if (r.ok) await aplicar(r.est);
     burbuja('ia', r.ok ? 'He deshecho el último cambio.' : 'No hay nada que deshacer.');
-    // Claude no ha visto el deshacer: lo verá en el próximo <estado_actual>
+    // El modelo no ha visto el deshacer: lo verá en el próximo <estado_actual>
   });
   document.querySelectorAll('#asis-sug button').forEach((b) => b.addEventListener('click', () => { txt.value = b.textContent; form.requestSubmit(); }));
   txt.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); } });
@@ -312,24 +304,21 @@ Convenciones: días 0 = lunes … 6 = domingo; las semanas se nombran por su lun
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const t = txt.value.trim();
-    if (!t || ocupado) return;
-    if (!clave) { vistaClave(true); return; }
+    if (!t || ocupado || !ASISTENTE_URL) return;
     ocupado = true; form.querySelector('button').disabled = true;
     txt.value = ''; burbuja('yo', t);
     const espera = burbuja('ia espera', 'Pensando…');
     const e0 = estado();
-    const usuario = {role: 'user', content: [{type: 'text', text: `<estado_actual>\n${contexto(e0)}\n</estado_actual>`}, {type: 'text', text: t}]};
+    const usuario = {role: 'user', content: `<estado_actual>\n${contexto(e0)}\n</estado_actual>\n\n${t}`};
     try {
-      const r = await conversar(clave, [...historial, usuario], e0, aplicar);
+      const r = await conversar([...historial, usuario], e0, aplicar);
       historial = r.historial;
       espera.remove(); burbuja('ia', r.texto);
     } catch (err) {
-      // la conversación vuelve a como estaba (sin turnos a medias); los cambios ya aplicados se quedan y Claude los verá en el próximo estado
+      // la conversación vuelve a como estaba (sin turnos a medias); los cambios ya aplicados se quedan y el modelo los verá en el próximo estado
       espera.remove(); burbuja('ia error', mensajeError(err));
     } finally {
       ocupado = false; form.querySelector('button').disabled = false; txt.focus();
     }
   });
-
-  APP.DB.get('claveIA').then((k) => { clave = k || null; }).catch(() => { clave = null; });
 })();

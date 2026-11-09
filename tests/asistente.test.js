@@ -1,7 +1,8 @@
 // Asistente: las herramientas que usa Claude para cambiar el plan, sin red ni pantalla.
 const test = require('node:test');
 const assert = require('node:assert');
-const {AN, PLAN, ASIS} = require('./cargar')();
+const W = require('./cargar')();
+const {AN, PLAN, ASIS} = W;
 
 const hoy = AN.parse('2026-03-02');
 const dia = (n) => AN.iso(AN.addDays(hoy, n));
@@ -112,4 +113,30 @@ test('preferencias: se guardan, se borran y aparecen en el contexto', () => {
   assert.match(ctx, /Tirada larga/);
   assert.match(ctx, /Media maratón/);
   assert.strictEqual(ASIS.ejecutar('borrar_preferencia', {indice: 1}, e1).est.preferencias.length, 0);
+});
+
+test('conversar: ejecuta lo que pide el modelo, devuelve su respuesta y le reenvía sus firmas', async () => {
+  const peticiones = [];
+  const respuestas = [
+    {choices: [{message: {role: 'assistant', content: null, extra_content: {google: {thought_signature: 'firma'}},
+      tool_calls: [{id: 'c1', type: 'function', function: {name: 'rehacer_semana', arguments: JSON.stringify({semana: SEM, dia_larga: 4})}}]}}]},
+    {choices: [{message: {role: 'assistant', content: 'Listo: la larga pasa al viernes.'}}]},
+  ];
+  W.fetch = async (url, init) => { peticiones.push(JSON.parse(init.body)); return {ok: true, status: 200, json: async () => respuestas.shift()}; };
+  const cambios = [];
+  const r = await ASIS.conversar([{role: 'user', content: 'pon la larga el viernes'}], base(), async (e) => { cambios.push(e); }, 'https://x');
+  assert.strictEqual(r.texto, 'Listo: la larga pasa al viernes.');
+  assert.strictEqual(cambios.length, 1);
+  assert.ok(ses(r.est.planes[SEM], 4).some((s) => s.larga));
+  const segunda = peticiones[1].messages;
+  assert.strictEqual(segunda[0].role, 'system');
+  assert.strictEqual(segunda[2].extra_content.google.thought_signature, 'firma');
+  assert.strictEqual(segunda[3].role, 'tool');
+  assert.strictEqual(segunda[3].tool_call_id, 'c1');
+  assert.ok(!segunda[3].content.startsWith('ERROR'));
+});
+
+test('conversar: un error de la API (cupo agotado) llega con su código', async () => {
+  W.fetch = async () => ({ok: false, status: 429, json: async () => [{error: {message: 'quota'}}]});
+  await assert.rejects(ASIS.conversar([{role: 'user', content: 'hola'}], base(), async () => {}, 'https://x'), (e) => e.status === 429);
 });

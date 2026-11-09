@@ -256,7 +256,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .asis-msg.yo { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
 .asis-msg.ia { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
 .asis-msg.espera { color: var(--muted); font-style: italic; }
-.asis-msg.error, .asis-err { color: var(--bad); }
+.asis-msg.error { color: var(--bad); }
 .asis-sug { display: flex; flex-wrap: wrap; gap: 6px; }
 .asis-sug .chip { background: none; color: var(--accent); cursor: pointer; white-space: normal; text-align: left; padding: 3px 10px; }
 .asis-form { display: flex; gap: 8px; align-items: flex-end; }

@@ -1,4 +1,4 @@
-/* Lectura de datos en el móvil: export de Strava (zip o activities.csv) y archivos GPX/TCX sueltos. */
+/* Lectura de datos en el móvil: export de Strava (zip, activities.csv o JSON de la API) y archivos GPX/TCX sueltos. */
 (() => {
   const MESES = {ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, oct: 10, nov: 11, dic: 12, dec: 12};
   const TIPO = {
@@ -57,8 +57,29 @@
     return out;
   }
 
+  // JSON de la API de Strava (/athlete/activities): una lista o {activities: [...]}
+  function actividadesDesdeJson(texto) {
+    let d;
+    try { d = JSON.parse(texto.replace(/^﻿/, '')); } catch (e) { throw new Error('El archivo no es un JSON válido.'); }
+    const lista = Array.isArray(d) ? d : (d && Array.isArray(d.activities) ? d.activities : []);
+    return lista.filter((a) => a && a.id != null && (a.start_date_local || a.start_date) && a.moving_time != null).map((a) => ({
+      // start_date_local ya es la hora local (Strava le pone una Z engañosa); start_date sí es UTC
+      id: 's' + a.id, origen: 'strava',
+      fecha: a.start_date_local ? String(a.start_date_local).slice(0, 19)
+        : new Date(new Date(a.start_date).getTime() - new Date(a.start_date).getTimezoneOffset() * 60000).toISOString().slice(0, 19),
+      nombre: a.name || '', tipo: TIPO[a.sport_type || a.type] || a.sport_type || a.type, descripcion: a.description || null,
+      seg_total: num(a.elapsed_time) || num(a.moving_time) || 0, seg_mov: num(a.moving_time) || 0, metros: num(a.distance) || 0,
+      fc_max: num(a.max_heartrate), fc: num(a.average_heartrate), esfuerzo: num(a.suffer_score), desnivel: num(a.total_elevation_gain) || 0,
+    }));
+  }
+
   async function leerStrava(file) {
     let texto, perfil = null;
+    if (/\.json$/i.test(file.name) || file.type.includes('json')) {
+      const acts = actividadesDesdeJson(await file.text());
+      if (!acts.length) throw new Error('No he encontrado actividades de Strava en el JSON.');
+      return {acts, perfil};
+    }
     if (/\.zip$/i.test(file.name) || file.type.includes('zip')) {
       const zip = await JSZip.loadAsync(file);
       const entrada = Object.values(zip.files).find((f) => /(^|\/)activities\.csv$/i.test(f.name));
@@ -199,5 +220,5 @@
       fc: hrs.length ? hrs.reduce((s, h) => s + h, 0) / hrs.length : null, fc_max: hrs.length ? Math.max(...hrs) : null};
   }
 
-  window.IMP = {leerStrava, leerActividad, leerTrack, leerFit, actividadesDesdeCsv, csv, fechaExport};
+  window.IMP = {leerStrava, leerActividad, leerTrack, leerFit, actividadesDesdeCsv, actividadesDesdeJson, csv, fechaExport};
 })();

@@ -33,7 +33,7 @@
     <div class="card onboard" id="onboard" hidden>
       <h2>Empieza importando tu Strava</h2>
       <p>En la web de Strava ve a <b>Ajustes → Mi cuenta → Descargar o eliminar tu cuenta → Solicitar tu archivo</b>. Cuando te llegue el email, descarga el zip y súbelo aquí. Todo se queda en este móvil.</p>
-      <label class="btn primary file"><input type="file" accept=".zip,.csv,application/zip,text/csv" data-import-strava hidden>Subir export de Strava</label>
+      <label class="btn primary file"><input type="file" accept=".zip,.csv,.json,application/zip,text/csv,application/json" data-import-strava hidden>Subir export de Strava</label>
       <p class="note">También puedes empezar sin historial: añade tus objetivos en Perfil y tus entrenos con el botón +.</p>
     </div>
 
@@ -221,7 +221,7 @@
     <div class="card">
       <h2>Perfil de Strava</h2>
       <p id="p-import-estado" class="note">Aún no has importado tu Strava.</p>
-      <label class="btn primary file"><input type="file" accept=".zip,.csv,application/zip,text/csv" data-import-strava hidden>Subir export de Strava (zip)</label>
+      <label class="btn primary file"><input type="file" accept=".zip,.csv,.json,application/zip,text/csv,application/json" data-import-strava hidden>Subir export de Strava (zip)</label>
       <details class="how"><summary>¿Cómo consigo el export?</summary>
         <p>En strava.com (también desde el navegador del móvil): <b>Ajustes → Mi cuenta → Descargar o eliminar tu cuenta → Solicitar tu archivo</b>. Strava te envía un email con el enlace; puede tardar desde minutos hasta unas horas. Descarga el zip y súbelo aquí. Hazlo una vez por semana para que todo esté preciso.</p></details>
     </div>
@@ -339,17 +339,11 @@
 </button>
 <section class="asis-panel" id="asis-panel" role="dialog" aria-labelledby="asis-t" hidden>
   <header class="asis-head"><h2 id="asis-t">Asistente</h2><button class="link" id="asis-cerrar" aria-label="Cerrar asistente">✕</button></header>
-  <div id="asis-clave" class="asis-body" hidden>
-    <p class="note">El asistente usa Claude con <b>tu propia clave de API</b> de Anthropic (consíguela en console.anthropic.com). Cada mensaje cuesta unos céntimos y se cobra en tu cuenta.</p>
-    <p class="note">Al usarlo, tu plan, tus objetivos y un resumen de tu historial se envían a Anthropic. La clave se guarda solo en este dispositivo y no va en las copias de seguridad.</p>
-    <form id="asis-clave-form" class="asis-form">
-      <label class="sr" for="asis-clave-in">Clave de API</label>
-      <input id="asis-clave-in" type="password" autocomplete="off" placeholder="sk-ant-…">
-      <button class="btn primary">Guardar</button>
-    </form>
-    <p class="note asis-err" id="asis-clave-err" hidden>Eso no parece una clave de Anthropic (empieza por «sk-ant-»).</p>
+  <div id="asis-off" class="asis-body" hidden>
+    <p class="note">El asistente aún no está activado. Vuelve pronto.</p>
   </div>
   <div id="asis-chat" class="asis-body" hidden>
+    <p class="note">Para responderte, lo que escribas, tu plan, tus objetivos y un resumen de tu historial se envían a Gemini (Google), que puede usarlos para mejorar sus productos. No escribas datos personales que no quieras compartir.</p>
     <div class="asis-log" id="asis-log" aria-live="polite"></div>
     <div class="asis-sug" id="asis-sug">
       <button type="button" class="chip">No me gusta esta semana, rehazla</button>
@@ -361,7 +355,7 @@
       <textarea id="asis-txt" rows="2" placeholder="Ej.: el jueves no puedo, muévelo"></textarea>
       <button class="btn primary">Enviar</button>
     </form>
-    <div class="asis-pie"><button class="link" id="asis-deshacer">Deshacer</button><button class="link" id="asis-nueva">Nueva conversación</button><button class="link" id="asis-olvidar">Cambiar clave</button></div>
+    <div class="asis-pie"><button class="link" id="asis-deshacer">Deshacer</button><button class="link" id="asis-nueva">Nueva conversación</button></div>
   </div>
 </section>
 
