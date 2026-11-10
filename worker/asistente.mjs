@@ -4,6 +4,8 @@
 // y pocas peticiones por minuto e IP.
 const API = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 const MODELO_POR_DEFECTO = 'gemini-3.8-flash';
+const ESPERA_MS = 30000;  // por modelo; Cloudflare corta a los 100 s, así caben dos intentos con margen
+const REINTENTAR = new Set([404, 429, 500, 503, 504]);
 const MAX_CUERPO = 400000;  // caracteres: una conversación muy larga se corta y se empieza otra
 const HERRAMIENTAS = ['borrar_preferencia', 'deshacer', 'editar_sesion', 'guardar_preferencia', 'rehacer_plan_completo', 'rehacer_semana', 'ver_semana'];
 const PREFIJO = 'Eres el asistente de Entreno';
@@ -48,8 +50,18 @@ export default {
     const fallo = validar(body);
     if (fallo) return error(400, fallo);
 
-    const r = await fetch(API, {method: 'POST', body: JSON.stringify(limpiar(body, env.MODELO)),
-      headers: {'content-type': 'application/json', Authorization: `Bearer ${env.GEMINI_API_KEY}`}});
+    // MODELO puede ser una lista: si uno está saturado, retirado o no contesta a tiempo, se prueba el siguiente
+    const modelos = String(env.MODELO || MODELO_POR_DEFECTO).split(',').map((s) => s.trim()).filter(Boolean);
+    const espera = Number(env.ESPERA_MS) || ESPERA_MS;
+    let r = null;
+    for (const modelo of modelos) {
+      try {
+        r = await fetch(API, {method: 'POST', body: JSON.stringify(limpiar(body, modelo)), signal: AbortSignal.timeout(espera),
+          headers: {'content-type': 'application/json', Authorization: `Bearer ${env.GEMINI_API_KEY}`}});
+      } catch (e) { r = null; continue; }
+      if (!REINTENTAR.has(r.status)) break;
+    }
+    if (!r) return error(503, 'El modelo no responde ahora mismo. Prueba en un momento.');
     return new Response(r.body, {status: r.status, headers: {...cors, 'content-type': r.headers.get('content-type') || 'application/json'}});
   },
 };

@@ -6,11 +6,13 @@
 name = "entreno-asistente"
 main = "asistente.mjs"
 compatibility_date = "2026-10-01"
+workers_dev = true
+preview_urls = false
 
 [vars]
 ORIGENES = "https://adrianramos13.github.io,http://localhost:8765"
-# modelo gratuito; si Google lo retira, cámbialo por otro de aistudio.google.com/rate-limit y vuelve a desplegar
-MODELO = "gemini-3.8-flash"
+# modelos gratuitos en orden: si el primero está saturado o no contesta en 30 s, se usa el siguiente
+MODELO = "gemini-3.8-flash,gemini-flash-lite-latest"
 
 # 10 mensajes por minuto e IP
 [[ratelimits]]

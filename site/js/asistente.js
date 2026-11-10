@@ -4,7 +4,7 @@
   const {iso, parse, addDays, lunes, ETIQUETA} = window.AN;
   const {NOMBRE_DIA} = window.PLAN;
   // Puente con la clave gratuita del dueño (carpeta worker/, se publica con `npx wrangler deploy`). Vacío = asistente desactivado.
-  const ASISTENTE_URL = '';
+  const ASISTENTE_URL = 'https://entreno-asistente.adrianramos13.workers.dev';
   const MAX_VUELTAS = 10;   // llamadas a la API por mensaje: corta bucles de herramientas sin fin
   const MAX_PREFS = 20;
 

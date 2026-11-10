@@ -34,6 +34,27 @@ test('reenvía a Gemini con la clave del Worker, su modelo y solo los campos per
   assert.strictEqual(b.max_tokens, undefined);
 });
 
+test('si un modelo está saturado o no contesta a tiempo, prueba con el siguiente de MODELO', async (t) => {
+  const worker = (await cargar()).default;
+  const usados = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    const {model} = JSON.parse(init.body); usados.push(model);
+    // el temporizador de AbortSignal.timeout no mantiene vivo a Node: este sí, hasta que se aborta
+    if (model === 'lento') return new Promise((res, rej) => { const vivo = setTimeout(() => {}, 5000); init.signal.addEventListener('abort', () => { clearTimeout(vivo); rej(init.signal.reason); }); });
+    if (model === 'saturado') return new Response('{"error":{"message":"high demand"}}', {status: 503});
+    return new Response('{"choices":[]}', {status: 200});
+  });
+  const env = {...ENV, MODELO: 'saturado, lento, bueno', ESPERA_MS: '50'};
+  const r = await worker.fetch(pedir(cuerpo()), env);
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(usados.join(), 'saturado,lento,bueno');
+  // si todos fallan, devuelve el último error
+  const r2 = await worker.fetch(pedir(cuerpo()), {...env, MODELO: 'saturado'});
+  assert.strictEqual(r2.status, 503);
+  const r3 = await worker.fetch(pedir(cuerpo()), {...env, MODELO: 'lento'});
+  assert.strictEqual(r3.status, 503);
+});
+
 test('rechaza otros orígenes, peticiones raras, exceso de mensajes y falta de clave', async (t) => {
   const worker = (await cargar()).default;
   t.mock.method(globalThis, 'fetch', async () => { throw new Error('no debería llamar a Gemini'); });
