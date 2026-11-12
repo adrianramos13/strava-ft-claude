@@ -432,6 +432,7 @@
   }
   $('#f-sport').addEventListener('change', actualizarCamposDeporte);
   $('#f-rpe').addEventListener('input', () => { $('#f-rpe-v').textContent = $('#f-rpe').value; });
+  const esJson = (f) => /\.json$/i.test(f.name) || f.type.includes('json');
   let archivoExtra = null;  // datos del archivo que el formulario no muestra (FC máx., desnivel)
   // repetida si empieza a la misma hora (±10 min) o si es el mismo día, deporte y duración parecida
   const mismoArchivo = (a, b) => Math.abs(new Date(a.fecha) - new Date(b.fecha)) < 10 * 60000 || mismoEntreno(a, b);
@@ -440,6 +441,13 @@
     let ok = 0, rep = 0; const fallos = [];
     for (const f of files) {
       try {
+        if (esJson(f)) {  // actividades de la API de Strava: se añaden, sin borrar las que ya hay
+          const {acts} = await window.IMP.leerStrava(f);
+          for (const a of acts) {
+            if (ST.acts.some((b) => b.id === a.id || mismoArchivo(a, b))) rep++; else { ST.acts.push(a); ok++; }
+          }
+          continue;
+        }
         const t = await window.IMP.leerActividad(f);
         const a = {id: 'f' + Date.now() + '-' + ok, origen: 'archivo', tipo: '', esfuerzo: null, rpe: null, descripcion: null, ...t,
           sport: t.sport || 'other', nombre: t.nombre || NOMBRE_DEF[t.sport || 'other']};
@@ -455,7 +463,7 @@
   $('#f-archivo').addEventListener('change', async (e) => {
     const files = [...e.target.files]; e.target.value = '';
     if (!files.length) return;
-    if (files.length > 1) { if (await guardarArchivos(files)) ir('inicio'); return; }
+    if (files.length > 1 || esJson(files[0])) { if (await guardarArchivos(files)) ir('inicio'); return; }
     const f = files[0];
     try {
       const t = await window.IMP.leerActividad(f);

@@ -26,6 +26,12 @@ test('acepta {activities: [...]}, usa type si falta sport_type y descarta lo que
   assert.strictEqual(acts[0].fc, null);
 });
 
+test('acepta una sola actividad (GET /activities/{id})', () => {
+  const acts = IMP.actividadesDesdeJson(JSON.stringify(API));
+  assert.strictEqual(acts.length, 1);
+  assert.strictEqual(acts[0].id, 's123');
+});
+
 test('JSON no válido o sin actividades da un error claro', () => {
   assert.throws(() => IMP.actividadesDesdeJson('{no es json'), /JSON/);
   assert.strictEqual(IMP.actividadesDesdeJson('{"hola": 1}').length, 0);

@@ -57,11 +57,11 @@
     return out;
   }
 
-  // JSON de la API de Strava (/athlete/activities): una lista o {activities: [...]}
+  // JSON de la API de Strava: una lista (/athlete/activities), {activities: [...]} o una sola actividad (/activities/{id})
   function actividadesDesdeJson(texto) {
     let d;
     try { d = JSON.parse(texto.replace(/^﻿/, '')); } catch (e) { throw new Error('El archivo no es un JSON válido.'); }
-    const lista = Array.isArray(d) ? d : (d && Array.isArray(d.activities) ? d.activities : []);
+    const lista = Array.isArray(d) ? d : (d && Array.isArray(d.activities) ? d.activities : (d && d.id != null ? [d] : []));
     return lista.filter((a) => a && a.id != null && (a.start_date_local || a.start_date) && a.moving_time != null).map((a) => ({
       // start_date_local ya es la hora local (Strava le pone una Z engañosa); start_date sí es UTC
       id: 's' + a.id, origen: 'strava',
