@@ -61,6 +61,7 @@
   function actividadesDesdeJson(texto) {
     let d;
     try { d = JSON.parse(texto.replace(/^﻿/, '')); } catch (e) { throw new Error('El archivo no es un JSON válido.'); }
+    if (d && Array.isArray(d.sets) && d.start_time) return [actividadDesdeHevy(d)];
     const lista = Array.isArray(d) ? d : (d && Array.isArray(d.activities) ? d.activities : (d && d.id != null ? [d] : []));
     return lista.filter((a) => a && a.id != null && (a.start_date_local || a.start_date) && a.moving_time != null).map((a) => ({
       // start_date_local ya es la hora local (Strava le pone una Z engañosa); start_date sí es UTC
@@ -71,6 +72,27 @@
       seg_total: num(a.elapsed_time) || num(a.moving_time) || 0, seg_mov: num(a.moving_time) || 0, metros: num(a.distance) || 0,
       fc_max: num(a.max_heartrate), fc: num(a.average_heartrate), esfuerzo: num(a.suffer_score), desnivel: num(a.total_elevation_gain) || 0,
     }));
+  }
+
+  // Entreno de fuerza exportado por Hevy (start_time, utc_offset, elapsed_time, sets[]): las series van como texto
+  // "Ejercicio" + líneas "Serie 1: 60 kg x 8" para que AN.seriesHevy las lea igual que las que llegan en la descripción de Strava.
+  function actividadDesdeHevy(d) {
+    const ini = new Date(d.start_time);
+    if (isNaN(ini)) throw new Error('El JSON de Hevy no tiene una fecha válida.');
+    const bloques = [];
+    d.sets.filter((s) => s && s.exercise_type).forEach((s) => {
+      const nombre = String(s.exercise_type).toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+      let b = bloques[bloques.length - 1];
+      if (!b || b.nombre !== nombre) bloques.push(b = {nombre, series: []});
+      b.series.push(`Serie ${b.series.length + 1}: ${num(s.weight) || 0} kg x ${num(s.repetitions) || 0}`);
+    });
+    const seg = num(d.elapsed_time) || num(d.active_time) || 0;
+    return {
+      id: 'h' + ini.getTime(), origen: 'archivo', sport: 'strength', tipo: 'WeightTraining',
+      fecha: new Date(ini.getTime() + (num(d.utc_offset) || 0) * 1000).toISOString().slice(0, 19),
+      nombre: 'Fuerza', descripcion: bloques.map((b) => [b.nombre, ...b.series].join('\n')).join('\n\n') || null,
+      seg_total: seg, seg_mov: num(d.active_time) || seg, metros: 0, fc_max: null, fc: null, esfuerzo: null, rpe: null, desnivel: 0,
+    };
   }
 
   async function leerStrava(file) {
@@ -220,5 +242,5 @@
       fc: hrs.length ? hrs.reduce((s, h) => s + h, 0) / hrs.length : null, fc_max: hrs.length ? Math.max(...hrs) : null};
   }
 
-  window.IMP = {leerStrava, leerActividad, leerTrack, leerFit, actividadesDesdeCsv, actividadesDesdeJson, csv, fechaExport};
+  window.IMP = {leerStrava, leerActividad, leerTrack, leerFit, actividadesDesdeCsv, actividadesDesdeJson, actividadDesdeHevy, csv, fechaExport};
 })();

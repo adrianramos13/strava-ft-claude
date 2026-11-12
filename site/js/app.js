@@ -453,7 +453,7 @@
           sport: t.sport || 'other', nombre: t.nombre || NOMBRE_DEF[t.sport || 'other']};
         if (ST.acts.some((b) => mismoArchivo(a, b))) { rep++; continue; }
         ST.acts.push(a); ok++;
-      } catch (err) { fallos.push(f.name); }
+      } catch (err) { fallos.push(`${f.name} (${err.message})`); }
     }
     await guardar('acts'); recalcular();
     const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;

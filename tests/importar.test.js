@@ -32,6 +32,17 @@ test('acepta una sola actividad (GET /activities/{id})', () => {
   assert.strictEqual(acts[0].id, 's123');
 });
 
+test('lee un entreno de fuerza exportado por Hevy y deja las series en texto para el 1RM', () => {
+  const hevy = {start_time: '2026-11-10T18:05:34.000Z', utc_offset: 3600, elapsed_time: 4488, active_time: 4488, creator: {name: 'Hevy'},
+    sets: [{exercise_type: 'OVERHEAD_DUMBBELL_PRESS', repetitions: 10, weight: 36}, {exercise_type: 'OVERHEAD_DUMBBELL_PRESS', repetitions: 8, weight: 40},
+      {exercise_type: 'CABLE_BICEPS_CURL', repetitions: 10, weight: 22.5}]};
+  const [a] = IMP.actividadesDesdeJson(JSON.stringify(hevy));
+  assert.strictEqual(a.sport, 'strength');
+  assert.strictEqual(a.fecha, '2026-11-10T19:05:34');
+  assert.strictEqual(a.seg_mov, 4488);
+  assert.strictEqual(a.descripcion, 'Overhead dumbbell press\nSerie 1: 36 kg x 10\nSerie 2: 40 kg x 8\n\nCable biceps curl\nSerie 1: 22.5 kg x 10');
+});
+
 test('JSON no válido o sin actividades da un error claro', () => {
   assert.throws(() => IMP.actividadesDesdeJson('{no es json'), /JSON/);
   assert.strictEqual(IMP.actividadesDesdeJson('{"hola": 1}').length, 0);
